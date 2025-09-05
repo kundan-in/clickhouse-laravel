@@ -11,8 +11,6 @@ use Mockery;
  * ClickHouse Query Grammar Test
  *
  * Tests the ClickHouse query grammar functionality and limitations.
- *
- * @package KundanIn\ClickHouseLaravel\Tests\Unit
  */
 class ClickHouseQueryGrammarTest extends TestCase
 {
@@ -26,8 +24,8 @@ class ClickHouseQueryGrammarTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
-        $this->grammar = new ClickHouseQueryGrammar();
+
+        $this->grammar = new ClickHouseQueryGrammar;
     }
 
     /**
@@ -38,9 +36,9 @@ class ClickHouseQueryGrammarTest extends TestCase
     public function test_compile_limit(): void
     {
         $query = Mockery::mock('query');
-        
+
         $result = $this->grammar->compileLimit($query, 10);
-        
+
         $this->assertEquals('LIMIT 10', $result);
     }
 
@@ -52,9 +50,9 @@ class ClickHouseQueryGrammarTest extends TestCase
     public function test_compile_limit_with_string(): void
     {
         $query = Mockery::mock('query');
-        
+
         $result = $this->grammar->compileLimit($query, '25');
-        
+
         $this->assertEquals('LIMIT 25', $result);
     }
 
@@ -67,14 +65,14 @@ class ClickHouseQueryGrammarTest extends TestCase
     {
         $query = Mockery::mock('query');
         $query->from = 'events';
-        
+
         $values = [
             ['id' => 1, 'name' => 'test1'],
-            ['id' => 2, 'name' => 'test2']
+            ['id' => 2, 'name' => 'test2'],
         ];
 
         $result = $this->grammar->compileInsert($query, $values);
-        
+
         $this->assertStringContainsString('INSERT INTO', $result);
         $this->assertStringContainsString('events', $result);
         $this->assertStringContainsString('id', $result);
@@ -90,9 +88,9 @@ class ClickHouseQueryGrammarTest extends TestCase
     public function test_compile_insert_with_empty_values(): void
     {
         $query = Mockery::mock('query');
-        
+
         $result = $this->grammar->compileInsert($query, []);
-        
+
         $this->assertEquals('', $result);
     }
 
@@ -105,10 +103,10 @@ class ClickHouseQueryGrammarTest extends TestCase
     {
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('ClickHouse does not support standard UPDATE queries. Use ALTER TABLE ... UPDATE instead.');
-        
+
         $query = Mockery::mock('query');
         $values = ['name' => 'updated'];
-        
+
         $this->grammar->compileUpdate($query, $values);
     }
 
@@ -121,9 +119,9 @@ class ClickHouseQueryGrammarTest extends TestCase
     {
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('ClickHouse does not support standard DELETE queries. Use ALTER TABLE ... DELETE instead.');
-        
+
         $query = Mockery::mock('query');
-        
+
         $this->grammar->compileDelete($query);
     }
 
@@ -134,7 +132,7 @@ class ClickHouseQueryGrammarTest extends TestCase
      */
     public function test_compile_select_calls_parent(): void
     {
-        $query = Mockery::mock('query');
+        $query = Mockery::mock('Illuminate\Database\Query\Builder');
         $query->columns = ['*'];
         $query->from = 'events';
         $query->wheres = [];
@@ -145,11 +143,46 @@ class ClickHouseQueryGrammarTest extends TestCase
         $query->offset = null;
         $query->unions = [];
         $query->lock = null;
-        
+
         $result = $this->grammar->compileSelect($query);
-        
+
         $this->assertIsString($result);
         $this->assertStringContainsString('select', strtolower($result));
+    }
+
+    /**
+     * Test wrapTable method adds database prefix.
+     *
+     * @return void
+     */
+    public function test_wrap_table_adds_database_prefix(): void
+    {
+        // Create a mock connection with database name
+        $mockConnection = Mockery::mock('KundanIn\ClickHouseLaravel\Database\ClickHouseConnection');
+        $mockConnection->shouldReceive('getDatabaseName')
+            ->andReturn('test_database');
+
+        // Set the connection on the grammar using reflection
+        $reflection = new \ReflectionClass($this->grammar);
+        $connectionProperty = $reflection->getProperty('connection');
+        $connectionProperty->setAccessible(true);
+        $connectionProperty->setValue($this->grammar, $mockConnection);
+
+        $result = $this->grammar->wrapTable('events');
+
+        $this->assertEquals('"test_database"."events"', $result);
+    }
+
+    /**
+     * Test wrapTable method handles already prefixed tables.
+     *
+     * @return void
+     */
+    public function test_wrap_table_handles_already_prefixed_tables(): void
+    {
+        $result = $this->grammar->wrapTable('my_db.events');
+
+        $this->assertEquals('"my_db"."events"', $result);
     }
 
     /**

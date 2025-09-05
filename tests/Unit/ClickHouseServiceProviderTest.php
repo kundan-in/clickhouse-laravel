@@ -11,8 +11,6 @@ use KundanIn\ClickHouseLaravel\Tests\TestCase;
  * ClickHouse Service Provider Test
  *
  * Tests the service provider registration and configuration publishing.
- *
- * @package KundanIn\ClickHouseLaravel\Tests\Unit
  */
 class ClickHouseServiceProviderTest extends TestCase
 {
@@ -34,7 +32,7 @@ class ClickHouseServiceProviderTest extends TestCase
     public function test_configuration_is_merged(): void
     {
         $config = $this->app->get('config');
-        
+
         $this->assertArrayHasKey('clickhouse', $config->all());
         $this->assertIsArray($config->get('clickhouse'));
         $this->assertEquals('127.0.0.1', $config->get('clickhouse.host'));
@@ -49,9 +47,9 @@ class ClickHouseServiceProviderTest extends TestCase
     public function test_clickhouse_driver_is_extended(): void
     {
         $db = $this->app->get('db');
-        
+
         $this->assertInstanceOf(DatabaseManager::class, $db);
-        
+
         // Test that we can get the ClickHouse connection configuration
         $connection = $db->connection('clickhouse');
         $this->assertInstanceOf(ClickHouseConnection::class, $connection);
@@ -65,10 +63,10 @@ class ClickHouseServiceProviderTest extends TestCase
     public function test_configuration_publishing_is_available(): void
     {
         $provider = new ClickHouseServiceProvider($this->app);
-        
+
         // Get the published paths
         $publishedPaths = $provider->publishedPaths();
-        
+
         // Check if config publishing is registered
         $this->assertArrayHasKey('clickhouse-config', $publishedPaths);
     }

@@ -11,8 +11,6 @@ use Mockery;
  * ClickHouse Connection Test
  *
  * Tests the ClickHouse database connection functionality.
- *
- * @package KundanIn\ClickHouseLaravel\Tests\Unit
  */
 class ClickHouseConnectionTest extends TestCase
 {
@@ -32,7 +30,7 @@ class ClickHouseConnectionTest extends TestCase
         ];
 
         $connection = new ClickHouseConnection($config);
-        
+
         $this->assertInstanceOf(ClickHouseConnection::class, $connection);
         $this->assertEquals($config, $connection->getConfig());
     }
@@ -51,9 +49,9 @@ class ClickHouseConnectionTest extends TestCase
             ->andReturn([['id' => 1, 'name' => 'test']]);
 
         $connection = $this->createConnectionWithMockClient($mockClient);
-        
+
         $result = $connection->select('SELECT * FROM test');
-        
+
         $this->assertEquals([['id' => 1, 'name' => 'test']], $result);
     }
 
@@ -71,9 +69,9 @@ class ClickHouseConnectionTest extends TestCase
             ->andReturn(true);
 
         $connection = $this->createConnectionWithMockClient($mockClient);
-        
+
         $result = $connection->insert('INSERT INTO test (name) VALUES (?)', ['test']);
-        
+
         $this->assertTrue($result);
     }
 
@@ -91,16 +89,16 @@ class ClickHouseConnectionTest extends TestCase
             ->andReturn(true);
 
         $connection = $this->createConnectionWithMockClient($mockClient);
-        
+
         $result = $connection->statement('CREATE TABLE test (id UInt32) ENGINE = Memory');
-        
+
         $this->assertTrue($result);
     }
 
     /**
      * Create a connection instance with a mock client.
      *
-     * @param \ClickHouseDB\Client $mockClient
+     * @param  \ClickHouseDB\Client  $mockClient
      * @return \KundanIn\ClickHouseLaravel\Database\ClickHouseConnection
      */
     private function createConnectionWithMockClient(Client $mockClient): ClickHouseConnection
@@ -114,7 +112,7 @@ class ClickHouseConnectionTest extends TestCase
         ];
 
         $connection = new ClickHouseConnection($config);
-        
+
         // Use reflection to inject the mock client
         $reflection = new \ReflectionClass($connection);
         $clientProperty = $reflection->getProperty('client');
