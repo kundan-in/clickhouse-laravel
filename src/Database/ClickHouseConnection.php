@@ -69,14 +69,77 @@ class ClickHouseConnection extends Connection
      */
     public function select($query, $bindings = [], $useReadPdo = true): array
     {
-        $result = $this->client->select($query, $bindings);
+        try {
+            // ClickHouse doesn't support parameter placeholders in FORMAT JSON queries
+            // We need to substitute the bindings manually
+            $processedQuery = $this->substituteBindings($query, $bindings);
 
-        // Handle both real Statement objects and mocked arrays for testing
-        if (is_array($result)) {
-            return $result;
+            $result = $this->client->select($processedQuery);
+
+            // Handle both real Statement objects and mocked arrays for testing
+            if (is_array($result)) {
+                return $this->normalizeResults($result);
+            }
+
+            $rows = $result->rows();
+
+            return $this->normalizeResults($rows);
+        } catch (\Exception $e) {
+            throw new \KundanIn\ClickHouseLaravel\Exceptions\ClickHouseException(
+                "Failed to execute select query: {$e->getMessage()}",
+                $e->getCode(),
+                $e
+            );
+        }
+    }
+
+    /**
+     * Normalize ClickHouse results to be compatible with Laravel Eloquent.
+     *
+     * @param  array  $results
+     * @return array
+     */
+    protected function normalizeResults(array $results): array
+    {
+        if (empty($results)) {
+            return [];
         }
 
-        return $result->rows();
+        // Check if we need normalization by scanning the first row
+        $needsNormalization = false;
+        if (! empty($results) && is_array($results[0])) {
+            foreach ($results[0] as $value) {
+                if (is_array($value) || is_object($value)) {
+                    $needsNormalization = true;
+                    break;
+                }
+            }
+        }
+
+        // Skip normalization if not needed for better performance
+        if (! $needsNormalization) {
+            return $results;
+        }
+
+        return array_map(function ($row) {
+            if (! is_array($row)) {
+                return $row;
+            }
+
+            // Convert complex data types to JSON strings for Laravel compatibility
+            foreach ($row as $key => $value) {
+                if (is_array($value)) {
+                    // Convert all arrays to JSON for proper casting
+                    $row[$key] = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+                } elseif (is_object($value)) {
+                    // Convert objects to JSON
+                    $row[$key] = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+                }
+                // Leave scalar values (string, int, float, bool, null) as-is
+            }
+
+            return $row;
+        }, $results);
     }
 
     /**
@@ -88,7 +151,7 @@ class ClickHouseConnection extends Connection
      */
     public function insert($query, $bindings = []): bool
     {
-        return $this->client->write($query, $bindings);
+        return $this->statement($query, $bindings);
     }
 
     /**
@@ -100,7 +163,15 @@ class ClickHouseConnection extends Connection
      */
     public function statement($query, $bindings = []): bool
     {
-        return $this->client->write($query, $bindings);
+        try {
+            return $this->client->write($query, $bindings);
+        } catch (\Exception $e) {
+            throw new \KundanIn\ClickHouseLaravel\Exceptions\ClickHouseException(
+                "Failed to execute statement: {$e->getMessage()}",
+                $e->getCode(),
+                $e
+            );
+        }
     }
 
     /**
@@ -111,7 +182,7 @@ class ClickHouseConnection extends Connection
      * @param  bool  $useReadPdo  Whether to use read PDO (not applicable for ClickHouse)
      * @return mixed
      */
-    public function selectOne($query, $bindings = [], $useReadPdo = true)
+    public function selectOne($query, $bindings = [], $useReadPdo = true): mixed
     {
         $result = $this->select($query, $bindings, $useReadPdo);
 
@@ -126,7 +197,7 @@ class ClickHouseConnection extends Connection
      * @param  bool  $useReadPdo  Whether to use read PDO (not applicable for ClickHouse)
      * @return mixed
      */
-    public function scalar($query, $bindings = [], $useReadPdo = true)
+    public function scalar($query, $bindings = [], $useReadPdo = true): mixed
     {
         $record = $this->selectOne($query, $bindings, $useReadPdo);
         if (! $record) {
@@ -134,6 +205,85 @@ class ClickHouseConnection extends Connection
         }
 
         return is_array($record) ? reset($record) : $record;
+    }
+
+    /**
+     * Substitute parameter bindings in the query.
+     * ClickHouse doesn't support parameter placeholders in FORMAT JSON queries,
+     * so we need to manually substitute the values.
+     *
+     * @param  string  $query  The SQL query with placeholders
+     * @param  array  $bindings  The values to substitute
+     * @return string The query with substituted values
+     */
+    protected function substituteBindings($query, $bindings): string
+    {
+        if (empty($bindings)) {
+            return $query;
+        }
+
+        $processed = $query;
+        $bindingIndex = 0;
+
+        // Replace each ? with the corresponding binding value
+        $processed = preg_replace_callback('/\?/', function ($matches) use ($bindings, &$bindingIndex) {
+            if ($bindingIndex >= count($bindings)) {
+                return '?'; // Keep the placeholder if no binding available
+            }
+
+            $value = $bindings[$bindingIndex++];
+
+            return $this->quoteValue($value);
+        }, $processed);
+
+        return $processed;
+    }
+
+    /**
+     * Quote a value for safe inclusion in SQL queries.
+     * Implements comprehensive ClickHouse escaping to prevent SQL injection.
+     *
+     * @param  mixed  $value
+     * @return string
+     */
+    protected function quoteValue($value): string
+    {
+        if (is_null($value)) {
+            return 'NULL';
+        }
+
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+
+        if (is_numeric($value) && ! is_string($value)) {
+            // Ensure it's actually numeric and not a string that looks numeric
+            return (string) $value;
+        }
+
+        // Comprehensive string escaping for ClickHouse
+        $value = (string) $value;
+        $escaped = str_replace([
+            '\\',    // Backslash must be escaped first
+            "'",     // Single quotes
+            '"',     // Double quotes
+            "\n",    // Newlines
+            "\r",    // Carriage returns
+            "\t",    // Tabs
+            "\0",    // Null bytes
+            "\x1a",  // EOF character
+        ], [
+            '\\\\',
+            "\\'",
+            '\\"',
+            '\\n',
+            '\\r',
+            '\\t',
+            '\\0',
+            '\\Z',
+        ], $value);
+
+        return "'".$escaped."'";
     }
 
     /**
@@ -163,12 +313,13 @@ class ClickHouseConnection extends Connection
      * Run an update statement against the database.
      *
      * @param  string  $query  The SQL query
-     * @param  array  $bindings  Query bindings
+     * @param  array  $bindings  Query bindings (ignored for ClickHouse ALTER UPDATE)
      * @return int
      */
     public function update($query, $bindings = []): int
     {
-        $this->client->write($query, $bindings);
+        // For ClickHouse ALTER UPDATE statements, bindings are already embedded in the query
+        $this->client->write($query);
 
         return 1; // ClickHouse doesn't return affected row count easily
     }
@@ -177,12 +328,13 @@ class ClickHouseConnection extends Connection
      * Run a delete statement against the database.
      *
      * @param  string  $query  The SQL query
-     * @param  array  $bindings  Query bindings
+     * @param  array  $bindings  Query bindings (ignored for ClickHouse ALTER DELETE)
      * @return int
      */
     public function delete($query, $bindings = []): int
     {
-        $this->client->write($query, $bindings);
+        // For ClickHouse ALTER DELETE statements, bindings are already embedded in the query
+        $this->client->write($query);
 
         return 1; // ClickHouse doesn't return affected row count easily
     }
@@ -321,5 +473,86 @@ class ClickHouseConnection extends Connection
     protected function getDefaultPostProcessor(): Processor
     {
         return new Processor;
+    }
+
+    /**
+     * Get a new Eloquent query builder for the connection.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return \KundanIn\ClickHouseLaravel\Database\ClickHouseEloquentBuilder
+     */
+    public function newEloquentBuilder($query)
+    {
+        return new ClickHouseEloquentBuilder($query);
+    }
+
+    /**
+     * Get a new query builder instance.
+     *
+     * @return \KundanIn\ClickHouseLaravel\Database\ClickHouseQueryBuilder
+     */
+    public function query()
+    {
+        return new ClickHouseQueryBuilder(
+            $this, $this->getQueryGrammar(), $this->getPostProcessor()
+        );
+    }
+
+    /**
+     * Get a schema builder instance for the connection.
+     *
+     * @return \KundanIn\ClickHouseLaravel\Database\ClickHouseSchemaBuilder
+     */
+    public function getSchemaBuilder()
+    {
+        if (is_null($this->schemaGrammar)) {
+            $this->useDefaultSchemaGrammar();
+        }
+
+        return new ClickHouseSchemaBuilder($this);
+    }
+
+    /**
+     * Perform a health check on the ClickHouse connection.
+     *
+     * @return bool
+     *
+     * @throws \KundanIn\ClickHouseLaravel\Exceptions\ClickHouseException
+     */
+    public function healthCheck(): bool
+    {
+        try {
+            $result = $this->select('SELECT 1 as health_check');
+
+            return ! empty($result) && isset($result[0]['health_check']) && $result[0]['health_check'] === 1;
+        } catch (\Exception $e) {
+            throw new \KundanIn\ClickHouseLaravel\Exceptions\ClickHouseException(
+                "ClickHouse connection health check failed: {$e->getMessage()}",
+                $e->getCode(),
+                $e
+            );
+        }
+    }
+
+    /**
+     * Get ClickHouse server version information.
+     *
+     * @return string
+     *
+     * @throws \KundanIn\ClickHouseLaravel\Exceptions\ClickHouseException
+     */
+    public function getServerVersion(): string
+    {
+        try {
+            $result = $this->select('SELECT version() as version');
+
+            return $result[0]['version'] ?? 'Unknown';
+        } catch (\Exception $e) {
+            throw new \KundanIn\ClickHouseLaravel\Exceptions\ClickHouseException(
+                "Failed to get ClickHouse server version: {$e->getMessage()}",
+                $e->getCode(),
+                $e
+            );
+        }
     }
 }

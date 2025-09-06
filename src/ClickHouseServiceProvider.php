@@ -52,6 +52,11 @@ class ClickHouseServiceProvider extends ServiceProvider
                 return new ClickHouseConnection($config);
             });
         });
+
+        // Register the ClickHouse facade
+        $this->app->bind('clickhouse', function ($app) {
+            return $app['db']->connection('clickhouse');
+        });
     }
 
     /**

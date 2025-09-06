@@ -21,13 +21,136 @@ class ClickHouseSchemaGrammar extends Grammar
      */
     public function compileCreate($blueprint, $command): string
     {
-        $table = $this->wrapTable($blueprint);
-        $columns = implode(', ', $this->getColumns($blueprint));
+        $sql = $this->compileCreateTable($blueprint);
 
-        // ClickHouse requires an ENGINE specification
-        $engine = $blueprint->engine ?? 'MergeTree()';
+        // Add engine specification
+        if (isset($blueprint->engine)) {
+            $sql .= $this->compileEngine($blueprint);
+        } else {
+            $sql .= ' ENGINE = MergeTree()';
+        }
 
-        return "CREATE TABLE {$table} ({$columns}) ENGINE = {$engine}";
+        // Add order by clause (required for MergeTree engines)
+        if ($this->hasCommand($blueprint, 'orderBy')) {
+            $sql .= $this->compileOrderBy($blueprint, $this->getCommandByName($blueprint, 'orderBy'));
+        }
+
+        // Add partition by clause
+        if ($this->hasCommand($blueprint, 'partitionBy')) {
+            $sql .= $this->compilePartitionBy($blueprint, $this->getCommandByName($blueprint, 'partitionBy'));
+        }
+
+        // Add primary key clause
+        if ($this->hasCommand($blueprint, 'primaryKey')) {
+            $sql .= $this->compilePrimaryKey($blueprint, $this->getCommandByName($blueprint, 'primaryKey'));
+        }
+
+        return $sql;
+    }
+
+    /**
+     * Compile the basic create table clause.
+     *
+     * @param  mixed  $blueprint
+     * @return string
+     */
+    protected function compileCreateTable($blueprint): string
+    {
+        return sprintf('CREATE TABLE %s (%s)',
+            $this->wrapTable($blueprint),
+            implode(', ', $this->getColumns($blueprint))
+        );
+    }
+
+    /**
+     * Compile engine clause.
+     *
+     * @param  mixed  $blueprint
+     * @return string
+     */
+    protected function compileEngine($blueprint): string
+    {
+        $engine = $blueprint->engine ?? 'MergeTree';
+        $options = $blueprint->engineOptions ?? [];
+
+        $engineClause = " ENGINE = {$engine}";
+
+        // Handle engine-specific options
+        switch ($engine) {
+            case 'ReplacingMergeTree':
+                if (isset($options['version_column'])) {
+                    $engineClause .= "({$this->wrap($options['version_column'])})";
+                } else {
+                    $engineClause .= '()';
+                }
+                break;
+
+            case 'SummingMergeTree':
+                if (isset($options['columns']) && ! empty($options['columns'])) {
+                    $columns = implode(', ', array_map([$this, 'wrap'], $options['columns']));
+                    $engineClause .= "({$columns})";
+                } else {
+                    $engineClause .= '()';
+                }
+                break;
+
+            case 'CollapsingMergeTree':
+                if (isset($options['sign_column'])) {
+                    $engineClause .= "({$this->wrap($options['sign_column'])})";
+                }
+                break;
+
+            case 'MergeTree':
+                $engineClause .= '()';
+                break;
+        }
+
+        return $engineClause;
+    }
+
+    /**
+     * Compile order by clause.
+     *
+     * @param  mixed  $blueprint
+     * @param  mixed  $command
+     * @return string
+     */
+    protected function compileOrderBy($blueprint, $command): string
+    {
+        $columns = is_array($command->columns) ? $command->columns : [$command->columns];
+        $columnList = implode(', ', array_map([$this, 'wrap'], $columns));
+
+        return " ORDER BY ({$columnList})";
+    }
+
+    /**
+     * Compile partition by clause.
+     *
+     * @param  mixed  $blueprint
+     * @param  mixed  $command
+     * @return string
+     */
+    protected function compilePartitionBy($blueprint, $command): string
+    {
+        $columns = is_array($command->columns) ? $command->columns : [$command->columns];
+        $columnList = implode(', ', array_map([$this, 'wrap'], $columns));
+
+        return " PARTITION BY ({$columnList})";
+    }
+
+    /**
+     * Compile primary key clause.
+     *
+     * @param  mixed  $blueprint
+     * @param  mixed  $command
+     * @return string
+     */
+    protected function compilePrimaryKey($blueprint, $command): string
+    {
+        $columns = is_array($command->columns) ? $command->columns : [$command->columns];
+        $columnList = implode(', ', array_map([$this, 'wrap'], $columns));
+
+        return " PRIMARY KEY ({$columnList})";
     }
 
     /**
@@ -181,5 +304,55 @@ class ClickHouseSchemaGrammar extends Grammar
     protected function typeTimestamp($column): string
     {
         return 'DateTime';
+    }
+
+    /**
+     * Check if a command exists in the blueprint.
+     *
+     * @param  mixed  $blueprint
+     * @param  string  $name
+     * @return bool
+     */
+    protected function hasCommand($blueprint, $name): bool
+    {
+        return $this->getCommandByName($blueprint, $name) !== null;
+    }
+
+    /**
+     * Get a command by name from the blueprint.
+     *
+     * @param  mixed  $blueprint
+     * @param  mixed  $name
+     * @return mixed|null
+     */
+    protected function getCommandByName($blueprint, $name)
+    {
+        $commands = array_filter($blueprint->getCommands(), function ($value) use ($name) {
+            return $value->name === $name;
+        });
+
+        return reset($commands) ?: null;
+    }
+
+    /**
+     * Get the SQL for a UUID column type.
+     *
+     * @param  mixed  $column
+     * @return string
+     */
+    protected function typeUuid($column): string
+    {
+        return 'UUID';
+    }
+
+    /**
+     * Get the SQL for an array column type.
+     *
+     * @param  mixed  $column
+     * @return string
+     */
+    protected function typeArray($column): string
+    {
+        return "Array({$column->type})";
     }
 }

@@ -95,32 +95,82 @@ class ClickHouseQueryGrammarTest extends TestCase
     }
 
     /**
-     * Test that compileUpdate throws exception.
+     * Test compileUpdate generates ALTER TABLE ... UPDATE syntax.
      *
      * @return void
      */
-    public function test_compile_update_throws_exception(): void
+    public function test_compile_update_generates_alter_table_syntax(): void
+    {
+        $query = Mockery::mock('Illuminate\Database\Query\Builder');
+        $query->from = 'events';
+        $query->wheres = [
+            ['type' => 'Basic', 'column' => 'id', 'operator' => '=', 'value' => 1, 'boolean' => 'and'],
+        ];
+
+        $values = ['name' => 'updated', 'status' => 'active'];
+
+        $result = $this->grammar->compileUpdate($query, $values);
+
+        $this->assertStringContainsString('ALTER TABLE', $result);
+        $this->assertStringContainsString('UPDATE', $result);
+        $this->assertStringContainsString('events', $result);
+        $this->assertStringContainsString('name', $result);
+        $this->assertStringContainsString('WHERE', $result);
+    }
+
+    /**
+     * Test compileUpdate throws exception without WHERE clause.
+     *
+     * @return void
+     */
+    public function test_compile_update_throws_exception_without_where(): void
     {
         $this->expectException(Exception::class);
-        $this->expectExceptionMessage('ClickHouse does not support standard UPDATE queries. Use ALTER TABLE ... UPDATE instead.');
+        $this->expectExceptionMessage('UPDATE queries on ClickHouse require a WHERE clause for safety.');
 
-        $query = Mockery::mock('query');
+        $query = Mockery::mock('Illuminate\Database\Query\Builder');
+        $query->from = 'events';
+        $query->wheres = [];
+
         $values = ['name' => 'updated'];
 
         $this->grammar->compileUpdate($query, $values);
     }
 
     /**
-     * Test that compileDelete throws exception.
+     * Test compileDelete generates ALTER TABLE ... DELETE syntax.
      *
      * @return void
      */
-    public function test_compile_delete_throws_exception(): void
+    public function test_compile_delete_generates_alter_table_syntax(): void
+    {
+        $query = Mockery::mock('Illuminate\Database\Query\Builder');
+        $query->from = 'events';
+        $query->wheres = [
+            ['type' => 'Basic', 'column' => 'id', 'operator' => '=', 'value' => 1, 'boolean' => 'and'],
+        ];
+
+        $result = $this->grammar->compileDelete($query);
+
+        $this->assertStringContainsString('ALTER TABLE', $result);
+        $this->assertStringContainsString('DELETE', $result);
+        $this->assertStringContainsString('events', $result);
+        $this->assertStringContainsString('WHERE', $result);
+    }
+
+    /**
+     * Test compileDelete throws exception without WHERE clause.
+     *
+     * @return void
+     */
+    public function test_compile_delete_throws_exception_without_where(): void
     {
         $this->expectException(Exception::class);
-        $this->expectExceptionMessage('ClickHouse does not support standard DELETE queries. Use ALTER TABLE ... DELETE instead.');
+        $this->expectExceptionMessage('DELETE queries on ClickHouse require a WHERE clause for safety.');
 
-        $query = Mockery::mock('query');
+        $query = Mockery::mock('Illuminate\Database\Query\Builder');
+        $query->from = 'events';
+        $query->wheres = [];
 
         $this->grammar->compileDelete($query);
     }
@@ -183,6 +233,27 @@ class ClickHouseQueryGrammarTest extends TestCase
         $result = $this->grammar->wrapTable('my_db.events');
 
         $this->assertEquals('"my_db"."events"', $result);
+    }
+
+    /**
+     * Test compileDelete works with whereDate clause.
+     *
+     * @return void
+     */
+    public function test_compile_delete_with_where_date(): void
+    {
+        $query = Mockery::mock('Illuminate\Database\Query\Builder');
+        $query->from = 'web_visitor_events';
+        $query->wheres = [
+            ['type' => 'Date', 'column' => 'created_at', 'operator' => '=', 'value' => '2025-09-03', 'boolean' => 'and'],
+        ];
+
+        $result = $this->grammar->compileDelete($query);
+
+        $this->assertStringContainsString('ALTER TABLE', $result);
+        $this->assertStringContainsString('DELETE', $result);
+        $this->assertStringContainsString('web_visitor_events', $result);
+        $this->assertStringContainsString('date("created_at") = \'2025-09-03\'', $result);
     }
 
     /**

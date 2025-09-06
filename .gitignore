@@ -39,6 +39,9 @@ pids
 # PHPUnit
 .phpunit.result.cache
 
+# Claude Code
+.claude/
+
 # Build files
 /build/
 /dist/
