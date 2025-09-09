@@ -164,7 +164,18 @@ class ClickHouseConnection extends Connection
     public function statement($query, $bindings = []): bool
     {
         try {
-            return $this->client->write($query, $bindings);
+            // Process query to add database prefix to table references
+            $processedQuery = $this->processTableReferences($query);
+
+            $result = $this->client->write($processedQuery, $bindings);
+
+            // Handle different return types from ClickHouse client
+            if (is_bool($result)) {
+                return $result;
+            }
+
+            // If it's a Statement object or other truthy value, consider it successful
+            return $result !== null && $result !== false;
         } catch (\Exception $e) {
             throw new \KundanIn\ClickHouseLaravel\Exceptions\ClickHouseException(
                 "Failed to execute statement: {$e->getMessage()}",
@@ -284,6 +295,59 @@ class ClickHouseConnection extends Connection
         ], $value);
 
         return "'".$escaped."'";
+    }
+
+    /**
+     * Process table references in SQL queries to add database prefix.
+     * This method automatically prepends the database name to table references
+     * that don't already have a database prefix.
+     *
+     * @param  string  $query  The SQL query
+     * @return string The processed query with database prefixes
+     */
+    protected function processTableReferences(string $query): string
+    {
+        $database = $this->getDatabaseName();
+
+        // If no database is configured, return as-is
+        if (empty($database) || $database === 'default') {
+            return $query;
+        }
+
+        // Check if the query already has database prefixes by looking for patterns like:
+        // FROM database.table, JOIN database.table, TABLE database.table, etc.
+        if (preg_match('/(?:FROM|JOIN|TABLE|INTO)\s+[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*\b/i', $query)) {
+            return $query;
+        }
+
+        // Pattern to match table references in common SQL statements
+        // This matches table names that follow keywords like TABLE, FROM, JOIN, INTO, etc.
+        $patterns = [
+            // OPTIMIZE TABLE table_name
+            '/\bOPTIMIZE\s+TABLE\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/i',
+            // DROP TABLE table_name
+            '/\bDROP\s+TABLE\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/i',
+            // CREATE TABLE table_name
+            '/\bCREATE\s+TABLE\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/i',
+            // TRUNCATE TABLE table_name
+            '/\bTRUNCATE\s+TABLE\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/i',
+            // INSERT INTO table_name
+            '/\bINSERT\s+INTO\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/i',
+            // FROM table_name
+            '/\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/i',
+            // JOIN table_name (covers INNER JOIN, LEFT JOIN, RIGHT JOIN, etc.)
+            '/\b(?:INNER\s+|LEFT\s+|RIGHT\s+|FULL\s+|CROSS\s+)?JOIN\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/i',
+            // ALTER TABLE table_name (for ClickHouse UPDATE/DELETE operations)
+            '/\bALTER\s+TABLE\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/i',
+        ];
+
+        foreach ($patterns as $pattern) {
+            $query = preg_replace_callback($pattern, function ($matches) use ($database) {
+                return str_replace($matches[1], $database.'.'.$matches[1], $matches[0]);
+            }, $query);
+        }
+
+        return $query;
     }
 
     /**
