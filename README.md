@@ -231,11 +231,3 @@ This package is open-sourced software licensed under the [MIT license](LICENSE).
 
 If you discover any security vulnerabilities or bugs, please create an issue in the [GitHub repository](https://github.com/kundan-in/clickhouse-laravel).
 
-## Changelog
-
-### v1.0.0
-- Initial release
-- Basic ClickHouse connection support
-- Laravel 10.x, 11.x, 12.x compatibility
-- Configuration publishing
-- Query builder integration

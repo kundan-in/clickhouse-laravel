@@ -205,7 +205,299 @@ class ClickHouseQueryGrammar extends Grammar
         $column = $this->wrap($where['column']);
         $value = $this->quoteClickHouseValue($where['value']);
 
-        return "date({$column}) = {$value}";
+        return "date({$column}) {$where['operator']} {$value}";
+    }
+
+    /**
+     * Compile a time where clause for ClickHouse ALTER statements.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereClickHouseTime($query, array $where): string
+    {
+        $column = $this->wrap($where['column']);
+        $value = $this->quoteClickHouseValue($where['value']);
+
+        return "toTime({$column}) {$where['operator']} {$value}";
+    }
+
+    /**
+     * Compile a day where clause for ClickHouse ALTER statements.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereClickHouseDay($query, array $where): string
+    {
+        $column = $this->wrap($where['column']);
+        $value = $this->quoteClickHouseValue($where['value']);
+
+        return "toDayOfMonth({$column}) {$where['operator']} {$value}";
+    }
+
+    /**
+     * Compile a month where clause for ClickHouse ALTER statements.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereClickHouseMonth($query, array $where): string
+    {
+        $column = $this->wrap($where['column']);
+        $value = $this->quoteClickHouseValue($where['value']);
+
+        return "toMonth({$column}) {$where['operator']} {$value}";
+    }
+
+    /**
+     * Compile a year where clause for ClickHouse ALTER statements.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereClickHouseYear($query, array $where): string
+    {
+        $column = $this->wrap($where['column']);
+        $value = $this->quoteClickHouseValue($where['value']);
+
+        return "toYear({$column}) {$where['operator']} {$value}";
+    }
+
+    /**
+     * Compile a between where clause for ClickHouse ALTER statements.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereClickHouseBetween($query, array $where): string
+    {
+        $column = $this->wrap($where['column']);
+        $between = 'BETWEEN';
+        
+        return $column.' '.$between.' '.$this->quoteClickHouseValue($where['values'][0]).' AND '.$this->quoteClickHouseValue($where['values'][1]);
+    }
+
+    /**
+     * Compile a not between where clause for ClickHouse ALTER statements.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereClickHouseNotBetween($query, array $where): string
+    {
+        $column = $this->wrap($where['column']);
+        $between = 'NOT BETWEEN';
+        
+        return $column.' '.$between.' '.$this->quoteClickHouseValue($where['values'][0]).' AND '.$this->quoteClickHouseValue($where['values'][1]);
+    }
+
+    /**
+     * Compile a between columns where clause for ClickHouse ALTER statements.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereClickHouseBetweenColumns($query, array $where): string
+    {
+        $column = $this->wrap($where['column']);
+        $between = 'BETWEEN';
+        
+        return $column.' '.$between.' '.$this->wrap($where['values'][0]).' AND '.$this->wrap($where['values'][1]);
+    }
+
+    /**
+     * Compile a not between columns where clause for ClickHouse ALTER statements.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereClickHouseNotBetweenColumns($query, array $where): string
+    {
+        $column = $this->wrap($where['column']);
+        $between = 'NOT BETWEEN';
+        
+        return $column.' '.$between.' '.$this->wrap($where['values'][0]).' AND '.$this->wrap($where['values'][1]);
+    }
+
+    /**
+     * Compile a null where clause for ClickHouse ALTER statements.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereClickHouseNull($query, array $where): string
+    {
+        return $this->wrap($where['column']).' IS NULL';
+    }
+
+    /**
+     * Compile a not null where clause for ClickHouse ALTER statements.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereClickHouseNotNull($query, array $where): string
+    {
+        return $this->wrap($where['column']).' IS NOT NULL';
+    }
+
+    /**
+     * Compile the "where" portions of the query for regular SELECT statements.
+     *
+     * @param  mixed  $query
+     * @return string
+     */
+    public function compileWheres($query): string
+    {
+        if (empty($query->wheres)) {
+            return '';
+        }
+
+        $wheres = [];
+
+        foreach ($query->wheres as $where) {
+            $method = 'where'.$where['type'];
+            if (method_exists($this, $method)) {
+                $wheres[] = $where['boolean'].' '.$this->{$method}($query, $where);
+            } else {
+                // Fallback to basic where handling for unsupported types
+                $wheres[] = $where['boolean'].' '.$this->whereBasic($query, $where);
+            }
+        }
+
+        if (count($wheres) > 0) {
+            $wheres[0] = preg_replace('/and |or /i', '', $wheres[0], 1);
+            return 'WHERE '.implode(' ', $wheres);
+        }
+
+        return '';
+    }
+
+    /**
+     * Compile a date where clause.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereDate($query, $where)
+    {
+        return "toDate(".$this->wrap($where['column']).") {$where['operator']} ".$this->parameter($where['value']);
+    }
+
+    /**
+     * Compile a time where clause.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereTime($query, $where)
+    {
+        return "toTime(".$this->wrap($where['column']).") {$where['operator']} ".$this->parameter($where['value']);
+    }
+
+    /**
+     * Compile a day where clause.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereDay($query, $where)
+    {
+        return "toDayOfMonth(".$this->wrap($where['column']).") {$where['operator']} ".$this->parameter($where['value']);
+    }
+
+    /**
+     * Compile a month where clause.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereMonth($query, $where)
+    {
+        return "toMonth(".$this->wrap($where['column']).") {$where['operator']} ".$this->parameter($where['value']);
+    }
+
+    /**
+     * Compile a year where clause.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereYear($query, $where)
+    {
+        return "toYear(".$this->wrap($where['column']).") {$where['operator']} ".$this->parameter($where['value']);
+    }
+
+    /**
+     * Compile a between where clause.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereBetween($query, $where)
+    {
+        $between = 'BETWEEN';
+        
+        return $this->wrap($where['column']).' '.$between.' '.$this->parameter($where['values'][0]).' AND '.$this->parameter($where['values'][1]);
+    }
+
+    /**
+     * Compile a not between where clause.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereNotBetween($query, $where)
+    {
+        $between = 'NOT BETWEEN';
+        
+        return $this->wrap($where['column']).' '.$between.' '.$this->parameter($where['values'][0]).' AND '.$this->parameter($where['values'][1]);
+    }
+
+    /**
+     * Compile a between columns where clause.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereBetweenColumns($query, $where)
+    {
+        $between = 'BETWEEN';
+        
+        return $this->wrap($where['column']).' '.$between.' '.$this->wrap($where['values'][0]).' AND '.$this->wrap($where['values'][1]);
+    }
+
+    /**
+     * Compile a not between columns where clause.
+     *
+     * @param  mixed  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereNotBetweenColumns($query, $where)
+    {
+        $between = 'NOT BETWEEN';
+        
+        return $this->wrap($where['column']).' '.$between.' '.$this->wrap($where['values'][0]).' AND '.$this->wrap($where['values'][1]);
     }
 
     /**

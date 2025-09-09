@@ -389,4 +389,319 @@ class ClickHouseQueryBuilder extends Builder
             }
         });
     }
+
+    /**
+     * Add a "where date" clause to the query.
+     *
+     * @param  string  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function whereDate($column, $operator = null, $value = null, $boolean = 'and')
+    {
+        [$value, $operator] = $this->prepareValueAndOperator($value, $operator, func_num_args() === 2);
+
+        $type = 'Date';
+
+        $this->wheres[] = compact('type', 'column', 'operator', 'value', 'boolean');
+
+        $this->addBinding($value, 'where');
+
+        return $this;
+    }
+
+    /**
+     * Add a "where time" clause to the query.
+     *
+     * @param  string  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function whereTime($column, $operator = null, $value = null, $boolean = 'and')
+    {
+        [$value, $operator] = $this->prepareValueAndOperator($value, $operator, func_num_args() === 2);
+
+        $type = 'Time';
+
+        $this->wheres[] = compact('type', 'column', 'operator', 'value', 'boolean');
+
+        $this->addBinding($value, 'where');
+
+        return $this;
+    }
+
+    /**
+     * Add a "where day" clause to the query.
+     *
+     * @param  string  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function whereDay($column, $operator = null, $value = null, $boolean = 'and')
+    {
+        [$value, $operator] = $this->prepareValueAndOperator($value, $operator, func_num_args() === 2);
+
+        $type = 'Day';
+
+        $this->wheres[] = compact('type', 'column', 'operator', 'value', 'boolean');
+
+        $this->addBinding($value, 'where');
+
+        return $this;
+    }
+
+    /**
+     * Add a "where month" clause to the query.
+     *
+     * @param  string  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function whereMonth($column, $operator = null, $value = null, $boolean = 'and')
+    {
+        [$value, $operator] = $this->prepareValueAndOperator($value, $operator, func_num_args() === 2);
+
+        $type = 'Month';
+
+        $this->wheres[] = compact('type', 'column', 'operator', 'value', 'boolean');
+
+        $this->addBinding($value, 'where');
+
+        return $this;
+    }
+
+    /**
+     * Add a "where year" clause to the query.
+     *
+     * @param  string  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function whereYear($column, $operator = null, $value = null, $boolean = 'and')
+    {
+        [$value, $operator] = $this->prepareValueAndOperator($value, $operator, func_num_args() === 2);
+
+        $type = 'Year';
+
+        $this->wheres[] = compact('type', 'column', 'operator', 'value', 'boolean');
+
+        $this->addBinding($value, 'where');
+
+        return $this;
+    }
+
+    /**
+     * Add a "where between" clause to the query.
+     *
+     * @param  string  $column
+     * @param  \Traversable|array  $values
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return $this
+     */
+    public function whereBetween($column, \Traversable|array $values, $boolean = 'and', $not = false)
+    {
+        $type = 'Between';
+
+        if ($not) {
+            $type = 'NotBetween';
+        }
+
+        // Convert Traversable to array
+        if ($values instanceof \Traversable) {
+            $values = iterator_to_array($values);
+        }
+
+        if (count($values) !== 2) {
+            throw new InvalidArgumentException('whereBetween expects exactly 2 values.');
+        }
+
+        $this->wheres[] = compact('type', 'column', 'values', 'boolean');
+
+        $this->addBinding($values, 'where');
+
+        return $this;
+    }
+
+    /**
+     * Add a "where not between" clause to the query.
+     *
+     * @param  string  $column
+     * @param  \Traversable|array  $values
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function whereNotBetween($column, \Traversable|array $values, $boolean = 'and')
+    {
+        return $this->whereBetween($column, $values, $boolean, true);
+    }
+
+    /**
+     * Add a "where between columns" clause to the query.
+     *
+     * @param  string  $column
+     * @param  \Traversable|array  $values
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return $this
+     */
+    public function whereBetweenColumns($column, \Traversable|array $values, $boolean = 'and', $not = false)
+    {
+        $type = 'BetweenColumns';
+
+        if ($not) {
+            $type = 'NotBetweenColumns';
+        }
+
+        // Convert Traversable to array
+        if ($values instanceof \Traversable) {
+            $values = iterator_to_array($values);
+        }
+
+        if (count($values) !== 2) {
+            throw new InvalidArgumentException('whereBetweenColumns expects exactly 2 values.');
+        }
+
+        $this->wheres[] = compact('type', 'column', 'values', 'boolean');
+
+        return $this;
+    }
+
+    /**
+     * Add a "where not between columns" clause to the query.
+     *
+     * @param  string  $column
+     * @param  \Traversable|array  $values
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function whereNotBetweenColumns($column, \Traversable|array $values, $boolean = 'and')
+    {
+        return $this->whereBetweenColumns($column, $values, $boolean, true);
+    }
+
+    /**
+     * Add a "where null" clause to the query.
+     *
+     * @param  string|array  $columns
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return $this
+     */
+    public function whereNull($columns, $boolean = 'and', $not = false)
+    {
+        $type = $not ? 'NotNull' : 'Null';
+
+        if (is_array($columns)) {
+            foreach ($columns as $column) {
+                $this->wheres[] = compact('type', 'column', 'boolean');
+            }
+        } else {
+            $column = $columns;
+            $this->wheres[] = compact('type', 'column', 'boolean');
+        }
+
+        return $this;
+    }
+
+    /**
+     * Add a "where not null" clause to the query.
+     *
+     * @param  string|array  $columns
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function whereNotNull($columns, $boolean = 'and')
+    {
+        return $this->whereNull($columns, $boolean, true);
+    }
+
+    /**
+     * Add a "where like" clause to the query.
+     *
+     * @param  string  $column
+     * @param  mixed  $value
+     * @param  bool  $caseSensitive
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return $this
+     */
+    public function whereLike($column, $value, $caseSensitive = false, $boolean = 'and', $not = false)
+    {
+        $operator = $not ? 'not like' : 'like';
+
+        return $this->where($column, $operator, $value, $boolean);
+    }
+
+    /**
+     * Add a "where not like" clause to the query.
+     *
+     * @param  string  $column
+     * @param  mixed  $value
+     * @param  bool  $caseSensitive
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function whereNotLike($column, $value, $caseSensitive = false, $boolean = 'and')
+    {
+        return $this->whereLike($column, $value, $caseSensitive, $boolean, true);
+    }
+
+    /**
+     * Add a "where ilike" clause to the query (case-insensitive like).
+     *
+     * @param  string  $column
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return $this
+     */
+    public function whereILike($column, $value, $boolean = 'and', $not = false)
+    {
+        $operator = $not ? 'not ilike' : 'ilike';
+
+        return $this->where($column, $operator, $value, $boolean);
+    }
+
+    /**
+     * Add a "where not ilike" clause to the query.
+     *
+     * @param  string  $column
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function whereNotILike($column, $value, $boolean = 'and')
+    {
+        return $this->whereILike($column, $value, $boolean, true);
+    }
+
+    /**
+     * Prepare the value and operator for a where clause.
+     *
+     * @param  string  $value
+     * @param  string  $operator
+     * @param  bool  $useDefault
+     * @return array
+     */
+    public function prepareValueAndOperator($value, $operator, $useDefault = false)
+    {
+        if ($useDefault) {
+            return [$operator, '='];
+        } elseif ($this->invalidOperatorAndValue($operator, $value)) {
+            throw new InvalidArgumentException('Illegal operator and value combination.');
+        }
+
+        return [$value, $operator];
+    }
 }
