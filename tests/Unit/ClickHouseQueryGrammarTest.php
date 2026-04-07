@@ -3,29 +3,33 @@
 namespace KundanIn\ClickHouseLaravel\Tests\Unit;
 
 use Exception;
+use KundanIn\ClickHouseLaravel\Database\ClickHouseConnection;
 use KundanIn\ClickHouseLaravel\Database\ClickHouseQueryGrammar;
 use KundanIn\ClickHouseLaravel\Tests\TestCase;
 use Mockery;
 
 /**
- * ClickHouse Query Grammar Test
- *
- * Tests the ClickHouse query grammar functionality and limitations.
+ * Tests for the ClickHouse query grammar compilation.
  */
 class ClickHouseQueryGrammarTest extends TestCase
 {
     protected ClickHouseQueryGrammar $grammar;
 
-    /**
-     * Set up the test environment.
-     *
-     * @return void
-     */
+    protected ClickHouseConnection $connection;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->grammar = new ClickHouseQueryGrammar;
+        $this->connection = new ClickHouseConnection([
+            'host' => '127.0.0.1',
+            'port' => 8123,
+            'username' => 'default',
+            'password' => '',
+            'database' => 'test_database',
+        ]);
+
+        $this->grammar = $this->connection->getQueryGrammar();
     }
 
     /**
@@ -207,10 +211,9 @@ class ClickHouseQueryGrammarTest extends TestCase
      */
     public function test_wrap_table_adds_database_prefix(): void
     {
-        // Create a mock connection with database name
         $mockConnection = Mockery::mock('KundanIn\ClickHouseLaravel\Database\ClickHouseConnection');
-        $mockConnection->shouldReceive('getDatabaseName')
-            ->andReturn('test_database');
+        $mockConnection->shouldReceive('getDatabaseName')->andReturn('test_database');
+        $mockConnection->shouldReceive('getTablePrefix')->andReturn('');
 
         // Set the connection on the grammar using reflection
         $reflection = new \ReflectionClass($this->grammar);
@@ -253,7 +256,7 @@ class ClickHouseQueryGrammarTest extends TestCase
         $this->assertStringContainsString('ALTER TABLE', $result);
         $this->assertStringContainsString('DELETE', $result);
         $this->assertStringContainsString('web_visitor_events', $result);
-        $this->assertStringContainsString('date("created_at") = \'2025-09-03\'', $result);
+        $this->assertStringContainsString('toDate("created_at") = \'2025-09-03\'', $result);
     }
 
     /**

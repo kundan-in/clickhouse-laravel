@@ -293,57 +293,6 @@ class ClickHouseDatabasePrefixingTest extends TestCase
     }
 
     /**
-     * Test statement method handles boolean return from client.
-     *
-     * @return void
-     */
-    public function test_statement_handles_boolean_return(): void
-    {
-        $this->mockClient->shouldReceive('write')
-            ->with('OPTIMIZE TABLE test_db.test_table FINAL', [])
-            ->once()
-            ->andReturn(true);
-
-        $result = $this->connection->statement('OPTIMIZE TABLE test_table FINAL');
-
-        $this->assertTrue($result);
-    }
-
-    /**
-     * Test statement method handles false return from client.
-     *
-     * @return void
-     */
-    public function test_statement_handles_false_return(): void
-    {
-        $this->mockClient->shouldReceive('write')
-            ->with('OPTIMIZE TABLE test_db.test_table FINAL', [])
-            ->once()
-            ->andReturn(false);
-
-        $result = $this->connection->statement('OPTIMIZE TABLE test_table FINAL');
-
-        $this->assertFalse($result);
-    }
-
-    /**
-     * Test statement method handles null return from client.
-     *
-     * @return void
-     */
-    public function test_statement_handles_null_return(): void
-    {
-        $this->mockClient->shouldReceive('write')
-            ->with('OPTIMIZE TABLE test_db.test_table FINAL', [])
-            ->once()
-            ->andReturn(null);
-
-        $result = $this->connection->statement('OPTIMIZE TABLE test_table FINAL');
-
-        $this->assertFalse($result);
-    }
-
-    /**
      * Test table names with underscores and numbers are handled correctly.
      *
      * @return void

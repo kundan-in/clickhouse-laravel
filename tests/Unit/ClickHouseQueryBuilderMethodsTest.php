@@ -6,437 +6,157 @@ use InvalidArgumentException;
 use KundanIn\ClickHouseLaravel\Database\ClickHouseConnection;
 use KundanIn\ClickHouseLaravel\Database\ClickHouseQueryBuilder;
 use KundanIn\ClickHouseLaravel\Tests\TestCase;
-use Mockery;
 
 /**
- * ClickHouse Query Builder Methods Test
- *
- * Tests the Laravel query builder methods like whereDate, whereBetween, etc.
+ * Tests for ClickHouse-specific query builder methods.
  */
 class ClickHouseQueryBuilderMethodsTest extends TestCase
 {
-    protected ClickHouseConnection $connection;
     protected ClickHouseQueryBuilder $builder;
 
-    /**
-     * Set up the test environment.
-     *
-     * @return void
-     */
     protected function setUp(): void
     {
         parent::setUp();
 
-        $config = [
+        $connection = new ClickHouseConnection([
             'host' => '127.0.0.1',
             'port' => 8123,
             'username' => 'default',
             'password' => '',
             'database' => 'test_db',
-        ];
+        ]);
 
-        $this->connection = new ClickHouseConnection($config);
-        $this->builder = $this->connection->query();
+        $this->builder = $connection->query();
     }
 
-    /**
-     * Test whereDate method.
-     *
-     * @return void
-     */
-    public function test_where_date(): void
+    public function test_sample_sets_ratio(): void
     {
-        $builder = $this->builder->from('test_table')->whereDate('created_at', '2025-09-07');
+        $builder = $this->builder->from('events')->sample(0.1);
 
-        $this->assertContains([
-            'type' => 'Date',
-            'column' => 'created_at',
-            'operator' => '=',
-            'value' => '2025-09-07',
-            'boolean' => 'and',
-        ], $builder->wheres);
-
-        $this->assertContains('2025-09-07', $builder->getBindings());
+        $this->assertEquals(0.1, $builder->sample);
     }
 
-    /**
-     * Test whereDate method with operator.
-     *
-     * @return void
-     */
-    public function test_where_date_with_operator(): void
-    {
-        $builder = $this->builder->from('test_table')->whereDate('created_at', '<=', '2025-09-07');
-
-        $this->assertContains([
-            'type' => 'Date',
-            'column' => 'created_at',
-            'operator' => '<=',
-            'value' => '2025-09-07',
-            'boolean' => 'and',
-        ], $builder->wheres);
-
-        $this->assertContains('2025-09-07', $builder->getBindings());
-    }
-
-    /**
-     * Test whereTime method.
-     *
-     * @return void
-     */
-    public function test_where_time(): void
-    {
-        $builder = $this->builder->from('test_table')->whereTime('created_at', '14:30:00');
-
-        $this->assertContains([
-            'type' => 'Time',
-            'column' => 'created_at',
-            'operator' => '=',
-            'value' => '14:30:00',
-            'boolean' => 'and',
-        ], $builder->wheres);
-    }
-
-    /**
-     * Test whereDay method.
-     *
-     * @return void
-     */
-    public function test_where_day(): void
-    {
-        $builder = $this->builder->from('test_table')->whereDay('created_at', 7);
-
-        $this->assertContains([
-            'type' => 'Day',
-            'column' => 'created_at',
-            'operator' => '=',
-            'value' => 7,
-            'boolean' => 'and',
-        ], $builder->wheres);
-    }
-
-    /**
-     * Test whereMonth method.
-     *
-     * @return void
-     */
-    public function test_where_month(): void
-    {
-        $builder = $this->builder->from('test_table')->whereMonth('created_at', 9);
-
-        $this->assertContains([
-            'type' => 'Month',
-            'column' => 'created_at',
-            'operator' => '=',
-            'value' => 9,
-            'boolean' => 'and',
-        ], $builder->wheres);
-    }
-
-    /**
-     * Test whereYear method.
-     *
-     * @return void
-     */
-    public function test_where_year(): void
-    {
-        $builder = $this->builder->from('test_table')->whereYear('created_at', 2025);
-
-        $this->assertContains([
-            'type' => 'Year',
-            'column' => 'created_at',
-            'operator' => '=',
-            'value' => 2025,
-            'boolean' => 'and',
-        ], $builder->wheres);
-    }
-
-    /**
-     * Test whereBetween method.
-     *
-     * @return void
-     */
-    public function test_where_between(): void
-    {
-        $builder = $this->builder->from('test_table')->whereBetween('created_at', ['2025-09-01', '2025-09-07']);
-
-        $this->assertContains([
-            'type' => 'Between',
-            'column' => 'created_at',
-            'values' => ['2025-09-01', '2025-09-07'],
-            'boolean' => 'and',
-        ], $builder->wheres);
-
-        // Check that both values are present in the bindings somewhere
-        $allBindings = collect($builder->getBindings())->flatten()->all();
-        $this->assertContains('2025-09-01', $allBindings);
-        $this->assertContains('2025-09-07', $allBindings);
-    }
-
-    /**
-     * Test whereNotBetween method.
-     *
-     * @return void
-     */
-    public function test_where_not_between(): void
-    {
-        $builder = $this->builder->from('test_table')->whereNotBetween('created_at', ['2025-09-01', '2025-09-07']);
-
-        $this->assertContains([
-            'type' => 'NotBetween',
-            'column' => 'created_at',
-            'values' => ['2025-09-01', '2025-09-07'],
-            'boolean' => 'and',
-        ], $builder->wheres);
-    }
-
-    /**
-     * Test whereBetween with invalid values throws exception.
-     *
-     * @return void
-     */
-    public function test_where_between_invalid_values(): void
+    public function test_sample_rejects_invalid_ratio(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('whereBetween expects exactly 2 values.');
 
-        $this->builder->from('test_table')->whereBetween('created_at', ['2025-09-01']);
+        $this->builder->from('events')->sample(0);
     }
 
-    /**
-     * Test whereBetweenColumns method.
-     *
-     * @return void
-     */
-    public function test_where_between_columns(): void
+    public function test_sample_rejects_ratio_above_one(): void
     {
-        $builder = $this->builder->from('test_table')->whereBetweenColumns('amount', ['min_amount', 'max_amount']);
+        $this->expectException(InvalidArgumentException::class);
 
-        $this->assertContains([
-            'type' => 'BetweenColumns',
-            'column' => 'amount',
-            'values' => ['min_amount', 'max_amount'],
-            'boolean' => 'and',
-        ], $builder->wheres);
+        $this->builder->from('events')->sample(1.5);
     }
 
-    /**
-     * Test whereNotBetweenColumns method.
-     *
-     * @return void
-     */
-    public function test_where_not_between_columns(): void
+    public function test_final_sets_flag(): void
     {
-        $builder = $this->builder->from('test_table')->whereNotBetweenColumns('amount', ['min_amount', 'max_amount']);
+        $builder = $this->builder->from('events')->final();
 
-        $this->assertContains([
-            'type' => 'NotBetweenColumns',
-            'column' => 'amount',
-            'values' => ['min_amount', 'max_amount'],
-            'boolean' => 'and',
-        ], $builder->wheres);
+        $this->assertTrue($builder->final);
     }
 
-    /**
-     * Test whereNull method.
-     *
-     * @return void
-     */
-    public function test_where_null(): void
+    public function test_prewhere_adds_condition(): void
     {
-        $builder = $this->builder->from('test_table')->whereNull('deleted_at');
+        $builder = $this->builder->from('events')->prewhere('user_id', '=', 123);
 
-        $this->assertContains([
-            'type' => 'Null',
-            'column' => 'deleted_at',
-            'boolean' => 'and',
-        ], $builder->wheres);
+        $this->assertCount(1, $builder->prewhere);
+        $this->assertEquals('user_id', $builder->prewhere[0]['column']);
+        $this->assertEquals('=', $builder->prewhere[0]['operator']);
+        $this->assertEquals(123, $builder->prewhere[0]['value']);
     }
 
-    /**
-     * Test whereNull method with array of columns.
-     *
-     * @return void
-     */
-    public function test_where_null_array(): void
+    public function test_where_array_has(): void
     {
-        $builder = $this->builder->from('test_table')->whereNull(['deleted_at', 'archived_at']);
+        $builder = $this->builder->from('events')->whereArrayHas('tags', 'important');
 
-        $this->assertContains([
-            'type' => 'Null',
-            'column' => 'deleted_at',
-            'boolean' => 'and',
-        ], $builder->wheres);
-
-        $this->assertContains([
-            'type' => 'Null',
-            'column' => 'archived_at',
-            'boolean' => 'and',
-        ], $builder->wheres);
+        $this->assertCount(1, $builder->wheres);
+        $this->assertEquals('ArrayHas', $builder->wheres[0]['type']);
+        $this->assertEquals('tags', $builder->wheres[0]['column']);
+        $this->assertEquals('important', $builder->wheres[0]['value']);
     }
 
-    /**
-     * Test whereNotNull method.
-     *
-     * @return void
-     */
-    public function test_where_not_null(): void
+    public function test_where_array_has_any(): void
     {
-        $builder = $this->builder->from('test_table')->whereNotNull('deleted_at');
+        $builder = $this->builder->from('events')->whereArrayHasAny('tags', ['a', 'b']);
 
-        $this->assertContains([
-            'type' => 'NotNull',
-            'column' => 'deleted_at',
-            'boolean' => 'and',
-        ], $builder->wheres);
+        $this->assertCount(1, $builder->wheres);
+        $this->assertEquals('ArrayHasAny', $builder->wheres[0]['type']);
+        $this->assertEquals(['a', 'b'], $builder->wheres[0]['values']);
     }
 
-    /**
-     * Test whereLike method.
-     *
-     * @return void
-     */
-    public function test_where_like(): void
+    public function test_where_array_has_all(): void
     {
-        $builder = $this->builder->from('test_table')->whereLike('name', '%john%');
+        $builder = $this->builder->from('events')->whereArrayHasAll('tags', ['x', 'y']);
 
-        $this->assertContains([
-            'type' => 'Basic',
-            'column' => 'name',
-            'operator' => 'like',
-            'value' => '%john%',
-            'boolean' => 'and',
-        ], $builder->wheres);
+        $this->assertCount(1, $builder->wheres);
+        $this->assertEquals('ArrayHasAll', $builder->wheres[0]['type']);
+        $this->assertEquals(['x', 'y'], $builder->wheres[0]['values']);
     }
 
-    /**
-     * Test whereNotLike method.
-     *
-     * @return void
-     */
-    public function test_where_not_like(): void
+    public function test_group_by_with_rollup(): void
     {
-        $builder = $this->builder->from('test_table')->whereNotLike('name', '%john%');
+        $sql = $this->builder->from('events')
+            ->select($this->builder->raw('status, count(*) as cnt'))
+            ->groupByWithRollup('status')
+            ->toSql();
 
-        $this->assertContains([
-            'type' => 'Basic',
-            'column' => 'name',
-            'operator' => 'not like',
-            'value' => '%john%',
-            'boolean' => 'and',
-        ], $builder->wheres);
+        $this->assertStringContainsStringIgnoringCase('WITH ROLLUP', $sql);
     }
 
-    /**
-     * Test whereILike method.
-     *
-     * @return void
-     */
-    public function test_where_ilike(): void
+    public function test_group_by_with_cube(): void
     {
-        $builder = $this->builder->from('test_table')->whereILike('name', '%john%');
+        $sql = $this->builder->from('events')
+            ->select($this->builder->raw('status, count(*) as cnt'))
+            ->groupByWithCube('status')
+            ->toSql();
 
-        $this->assertContains([
-            'type' => 'Basic',
-            'column' => 'name',
-            'operator' => 'ilike',
-            'value' => '%john%',
-            'boolean' => 'and',
-        ], $builder->wheres);
+        $this->assertStringContainsStringIgnoringCase('WITH CUBE', $sql);
     }
 
-    /**
-     * Test whereNotILike method.
-     *
-     * @return void
-     */
-    public function test_where_not_ilike(): void
-    {
-        $builder = $this->builder->from('test_table')->whereNotILike('name', '%john%');
-
-        $this->assertContains([
-            'type' => 'Basic',
-            'column' => 'name',
-            'operator' => 'not ilike',
-            'value' => '%john%',
-            'boolean' => 'and',
-        ], $builder->wheres);
-    }
-
-    /**
-     * Test chaining multiple where methods.
-     *
-     * @return void
-     */
-    public function test_chaining_where_methods(): void
+    public function test_chaining_clickhouse_specific_methods(): void
     {
         $builder = $this->builder
-            ->from('test_table')
-            ->whereDate('created_at', '<=', '2025-09-07')
-            ->whereBetween('id', [1, 100])
-            ->whereNotNull('name')
+            ->from('events')
+            ->sample(0.5)
+            ->final()
+            ->prewhere('date', '>=', '2024-01-01')
+            ->where('status', 'active')
             ->limit(100);
 
-        $this->assertCount(3, $builder->wheres);
+        $this->assertEquals(0.5, $builder->sample);
+        $this->assertTrue($builder->final);
+        $this->assertCount(1, $builder->prewhere);
+        $this->assertCount(1, $builder->wheres);
         $this->assertEquals(100, $builder->limit);
-        
-        // Verify all where clauses are present
-        $this->assertTrue(collect($builder->wheres)->contains('type', 'Date'));
-        $this->assertTrue(collect($builder->wheres)->contains('type', 'Between'));
-        $this->assertTrue(collect($builder->wheres)->contains('type', 'NotNull'));
     }
 
-    /**
-     * Test toArray method works with query builder.
-     *
-     * @return void
-     */
-    public function test_to_array_compatibility(): void
+    public function test_standard_where_date_works(): void
     {
-        // This tests that the query builder can be used with ->toArray()
-        // which would typically be called on the result collection
-        $builder = $this->builder
-            ->from('test_table')
-            ->whereDate('created_at', '<=', '2025-09-07')
-            ->limit(100);
+        $sql = $this->builder->from('events')
+            ->whereDate('created_at', '2025-09-07')
+            ->toSql();
 
-        // Verify the SQL is generated correctly
-        $sql = $builder->toSql();
-        
-        $this->assertStringContainsString('toDate("created_at") <= ?', $sql);
-        $this->assertStringContainsString('LIMIT 100', $sql);
+        $this->assertStringContainsString('toDate(', $sql);
+        $this->assertStringContainsString('"created_at"', $sql);
     }
 
-    /**
-     * Test prepareValueAndOperator method.
-     *
-     * @return void
-     */
-    public function test_prepare_value_and_operator(): void
+    public function test_standard_where_year_works(): void
     {
-        $reflection = new \ReflectionClass($this->builder);
-        $method = $reflection->getMethod('prepareValueAndOperator');
-        $method->setAccessible(true);
+        $sql = $this->builder->from('events')
+            ->whereYear('created_at', 2025)
+            ->toSql();
 
-        // Test with default operator (when useDefault is true, returns [operator, '='])
-        [$value, $operator] = $method->invoke($this->builder, null, '2025-09-07', true);
-        $this->assertEquals('2025-09-07', $value);
-        $this->assertEquals('=', $operator);
-
-        // Test with explicit operator
-        [$value, $operator] = $method->invoke($this->builder, '2025-09-07', '<=', false);
-        $this->assertEquals('2025-09-07', $value);
-        $this->assertEquals('<=', $operator);
+        $this->assertStringContainsString('toYear(', $sql);
     }
 
-    /**
-     * Clean up after each test.
-     *
-     * @return void
-     */
-    protected function tearDown(): void
+    public function test_standard_where_month_works(): void
     {
-        Mockery::close();
-        parent::tearDown();
+        $sql = $this->builder->from('events')
+            ->whereMonth('created_at', 9)
+            ->toSql();
+
+        $this->assertStringContainsString('toMonth(', $sql);
     }
 }

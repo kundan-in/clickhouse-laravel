@@ -197,7 +197,7 @@ class ClickHouseSchemaBuilder extends Builder
 
     /**
      * Modify a table on the schema.
-     * Note: ClickHouse has limited ALTER support.
+     * ClickHouse supports a limited subset of ALTER TABLE operations.
      *
      * @param  string  $table
      * @param  \Closure  $callback
@@ -238,7 +238,7 @@ class ClickHouseSchemaBuilder extends Builder
 
     /**
      * Drop columns from a table schema.
-     * Note: ClickHouse has limited column dropping support.
+     * ClickHouse supports dropping columns via ALTER TABLE.
      *
      * @param  string  $table
      * @param  string|array  $columns
@@ -349,15 +349,11 @@ class ClickHouseSchemaBuilder extends Builder
      */
     protected function createBlueprint($table, ?Closure $callback = null)
     {
-        $prefix = $this->connection->getConfig('prefix_indexes')
-                    ? $this->connection->getConfig('prefix')
-                    : '';
-
         if (isset($this->resolver)) {
-            return call_user_func($this->resolver, $table, $callback, $prefix);
+            return call_user_func($this->resolver, $this->connection, $table, $callback);
         }
 
-        return new ClickHouseBlueprint($table, $callback, $prefix);
+        return new ClickHouseBlueprint($this->connection, $table, $callback);
     }
 
     /**
