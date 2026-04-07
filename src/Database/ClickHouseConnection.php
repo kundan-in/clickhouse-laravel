@@ -11,30 +11,36 @@ use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\Processors\Processor;
 
 /**
- * ClickHouse Database Connection
+ * ClickHouse database connection for Laravel.
  *
- * This class extends Laravel's Connection class to provide ClickHouse database
- * connectivity using the smi2/phpClickHouse client library.
+ * Extends Laravel's base Connection class to provide ClickHouse connectivity
+ * using the smi2/phpClickHouse Client library. Handles query execution,
+ * parameter binding, result normalization, and automatic database prefixing
+ * for all SQL operations.
  */
 class ClickHouseConnection extends Connection
 {
     /**
      * The ClickHouse client instance.
      *
-     * @var Client
+     * @var \ClickHouseDB\Client
      */
     protected Client $client;
 
     /**
      * Create a new ClickHouse connection instance.
      *
-     * @param  array  $config  The database connection configuration
+     * Initializes the underlying ClickHouse client with the provided
+     * configuration and applies timeout settings via the client API.
+     *
+     * @param  array{host?: string, port?: int, username?: string, password?: string, database?: string, timeout?: int, connect_timeout?: float, settings?: array, prefix?: string}  $config
+     *
+     * @throws \InvalidArgumentException
      */
     public function __construct(array $config)
     {
         $this->config = $config;
 
-        // Transform Laravel config to ClickHouse client config format
         $clickhouseConfig = [
             'host' => $config['host'] ?? '127.0.0.1',
             'port' => $config['port'] ?? 8123,
@@ -43,16 +49,16 @@ class ClickHouseConnection extends Connection
             'database' => $config['database'] ?? 'default',
         ];
 
-        // Add any additional settings
         if (isset($config['settings'])) {
             $clickhouseConfig['settings'] = $config['settings'];
         }
 
         $this->client = new Client($clickhouseConfig);
 
-        // Initialize the connection with proper grammar and post processor
+        $this->applyTimeoutSettings($config);
+
         parent::__construct(
-            null, // PDO is not used for ClickHouse
+            null,
             $config['database'] ?? '',
             $config['prefix'] ?? '',
             $config
@@ -60,18 +66,38 @@ class ClickHouseConnection extends Connection
     }
 
     /**
+     * Apply timeout settings to the ClickHouse client.
+     *
+     * Configures both the TCP connection timeout and the query execution /
+     * HTTP request timeout using the smi2/phpClickHouse client API.
+     *
+     * @param  array{timeout?: int, connect_timeout?: float}  $config
+     */
+    protected function applyTimeoutSettings(array $config): void
+    {
+        if (isset($config['connect_timeout'])) {
+            $this->client->setConnectTimeOut((float) $config['connect_timeout']);
+        }
+
+        if (isset($config['timeout'])) {
+            $this->client->setTimeout((int) $config['timeout']);
+        }
+    }
+
+    /**
      * Run a select statement and return the result.
      *
-     * @param  string  $query  The SQL query
-     * @param  array  $bindings  Query bindings
-     * @param  bool  $useReadPdo  Whether to use read PDO (not applicable for ClickHouse)
+     * @param  string  $query
+     * @param  array  $bindings
+     * @param  bool  $useReadPdo
+     * @param  array  $fetchUsing
      * @return array
+     *
+     * @throws \KundanIn\ClickHouseLaravel\Exceptions\ClickHouseException
      */
-    public function select($query, $bindings = [], $useReadPdo = true): array
+    public function select($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []): array
     {
         try {
-            // ClickHouse doesn't support parameter placeholders in FORMAT JSON queries
-            // We need to substitute the bindings manually
             $processedQuery = $this->substituteBindings($query, $bindings);
 
             $result = $this->client->select($processedQuery);
@@ -94,7 +120,10 @@ class ClickHouseConnection extends Connection
     }
 
     /**
-     * Normalize ClickHouse results to be compatible with Laravel Eloquent.
+     * Normalize ClickHouse results for Laravel Eloquent compatibility.
+     *
+     * Converts complex data types (arrays, objects) to JSON strings so
+     * that Laravel's attribute casting can handle them properly.
      *
      * @param  array  $results
      * @return array
@@ -145,8 +174,8 @@ class ClickHouseConnection extends Connection
     /**
      * Run an insert statement against the database.
      *
-     * @param  string  $query  The SQL query
-     * @param  array  $bindings  Query bindings
+     * @param  string  $query
+     * @param  array  $bindings
      * @return bool
      */
     public function insert($query, $bindings = []): bool
@@ -155,16 +184,17 @@ class ClickHouseConnection extends Connection
     }
 
     /**
-     * Execute an SQL statement and return the result.
+     * Execute an SQL statement and return the boolean result.
      *
-     * @param  string  $query  The SQL query
-     * @param  array  $bindings  Query bindings
+     * @param  string  $query
+     * @param  array  $bindings
      * @return bool
+     *
+     * @throws \KundanIn\ClickHouseLaravel\Exceptions\ClickHouseException
      */
     public function statement($query, $bindings = []): bool
     {
         try {
-            // Process query to add database prefix to table references
             $processedQuery = $this->processTableReferences($query);
 
             $result = $this->client->write($processedQuery, $bindings);
@@ -188,9 +218,9 @@ class ClickHouseConnection extends Connection
     /**
      * Run a select statement and return a single result.
      *
-     * @param  string  $query  The SQL query
-     * @param  array  $bindings  Query bindings
-     * @param  bool  $useReadPdo  Whether to use read PDO (not applicable for ClickHouse)
+     * @param  string  $query
+     * @param  array  $bindings
+     * @param  bool  $useReadPdo
      * @return mixed
      */
     public function selectOne($query, $bindings = [], $useReadPdo = true): mixed
@@ -203,9 +233,9 @@ class ClickHouseConnection extends Connection
     /**
      * Run a select statement and return a scalar result.
      *
-     * @param  string  $query  The SQL query
-     * @param  array  $bindings  Query bindings
-     * @param  bool  $useReadPdo  Whether to use read PDO (not applicable for ClickHouse)
+     * @param  string  $query
+     * @param  array  $bindings
+     * @param  bool  $useReadPdo
      * @return mixed
      */
     public function scalar($query, $bindings = [], $useReadPdo = true): mixed
@@ -219,13 +249,14 @@ class ClickHouseConnection extends Connection
     }
 
     /**
-     * Substitute parameter bindings in the query.
-     * ClickHouse doesn't support parameter placeholders in FORMAT JSON queries,
-     * so we need to manually substitute the values.
+     * Substitute parameter bindings into the query string.
      *
-     * @param  string  $query  The SQL query with placeholders
-     * @param  array  $bindings  The values to substitute
-     * @return string The query with substituted values
+     * ClickHouse does not support parameter placeholders in FORMAT JSON
+     * queries, so values are manually substituted and escaped.
+     *
+     * @param  string  $query
+     * @param  array  $bindings
+     * @return string
      */
     protected function substituteBindings($query, $bindings): string
     {
@@ -251,8 +282,7 @@ class ClickHouseConnection extends Connection
     }
 
     /**
-     * Quote a value for safe inclusion in SQL queries.
-     * Implements comprehensive ClickHouse escaping to prevent SQL injection.
+     * Quote a value for safe inclusion in ClickHouse SQL queries.
      *
      * @param  mixed  $value
      * @return string
@@ -298,12 +328,10 @@ class ClickHouseConnection extends Connection
     }
 
     /**
-     * Process table references in SQL queries to add database prefix.
-     * This method automatically prepends the database name to table references
-     * that don't already have a database prefix.
+     * Prepend the configured database name to unqualified table references.
      *
-     * @param  string  $query  The SQL query
-     * @return string The processed query with database prefixes
+     * @param  string  $query
+     * @return string
      */
     protected function processTableReferences(string $query): string
     {
@@ -351,11 +379,11 @@ class ClickHouseConnection extends Connection
     }
 
     /**
-     * Get a query builder for the table.
+     * Get a query builder instance for the given table.
      *
      * @param  string  $table
      * @param  string|null  $as
-     * @return QueryBuilder
+     * @return \Illuminate\Database\Query\Builder
      */
     public function table($table, $as = null): QueryBuilder
     {
@@ -366,7 +394,7 @@ class ClickHouseConnection extends Connection
      * Get a new raw query expression.
      *
      * @param  mixed  $value
-     * @return Expression
+     * @return \Illuminate\Database\Query\Expression
      */
     public function raw($value): Expression
     {
@@ -376,51 +404,53 @@ class ClickHouseConnection extends Connection
     /**
      * Run an update statement against the database.
      *
-     * @param  string  $query  The SQL query
-     * @param  array  $bindings  Query bindings (ignored for ClickHouse ALTER UPDATE)
+     * Bindings are already embedded in ALTER UPDATE queries by the grammar.
+     *
+     * @param  string  $query
+     * @param  array  $bindings
      * @return int
      */
     public function update($query, $bindings = []): int
     {
-        // For ClickHouse ALTER UPDATE statements, bindings are already embedded in the query
         $this->client->write($query);
 
-        return 1; // ClickHouse doesn't return affected row count easily
+        return 1;
     }
 
     /**
      * Run a delete statement against the database.
      *
-     * @param  string  $query  The SQL query
-     * @param  array  $bindings  Query bindings (ignored for ClickHouse ALTER DELETE)
+     * Bindings are already embedded in ALTER DELETE queries by the grammar.
+     *
+     * @param  string  $query
+     * @param  array  $bindings
      * @return int
      */
     public function delete($query, $bindings = []): int
     {
-        // For ClickHouse ALTER DELETE statements, bindings are already embedded in the query
         $this->client->write($query);
 
-        return 1; // ClickHouse doesn't return affected row count easily
+        return 1;
     }
 
     /**
-     * Execute an SQL statement and return the boolean result.
+     * Run an SQL statement and return the number of affected rows.
      *
-     * @param  string  $query  The SQL query
-     * @param  array  $bindings  Query bindings
+     * @param  string  $query
+     * @param  array  $bindings
      * @return int
      */
     public function affectingStatement($query, $bindings = []): int
     {
         $this->client->write($query, $bindings);
 
-        return 1; // ClickHouse doesn't return affected row count easily
+        return 1;
     }
 
     /**
-     * Run a raw, unprepared query against the PDO connection.
+     * Run a raw, unprepared query against the database.
      *
-     * @param  string  $query  The SQL query
+     * @param  string  $query
      * @return bool
      */
     public function unprepared($query): bool
@@ -429,52 +459,109 @@ class ClickHouseConnection extends Connection
     }
 
     /**
-     * Execute a Closure within a transaction.
+     * Insert a batch of rows using ClickHouse's native bulk insert.
      *
-     * @param  Closure  $callback
+     * This is significantly faster than row-by-row INSERT for large datasets.
+     * Uses the smi2/phpClickHouse client's native insert which sends data
+     * in ClickHouse's columnar format.
+     *
+     * @param  string  $table
+     * @param  array  $rows  Array of associative arrays.
+     * @param  array  $columns  Column names (auto-detected from first row if empty).
+     * @return bool
+     *
+     * @throws \KundanIn\ClickHouseLaravel\Exceptions\ClickHouseException
+     */
+    public function bulkInsert(string $table, array $rows, array $columns = []): bool
+    {
+        if (empty($rows)) {
+            return true;
+        }
+
+        if (empty($columns)) {
+            $columns = array_keys($rows[0]);
+        }
+
+        try {
+            $this->client->insert($table, $rows, $columns);
+
+            return true;
+        } catch (\Exception $e) {
+            throw new \KundanIn\ClickHouseLaravel\Exceptions\ClickHouseException(
+                "Bulk insert failed: {$e->getMessage()}",
+                $e->getCode(),
+                $e
+            );
+        }
+    }
+
+    /**
+     * Run a select statement and return a generator for streaming results.
+     *
+     * @param  string  $query
+     * @param  array  $bindings
+     * @param  bool  $useReadPdo
+     * @return \Generator
+     */
+    public function cursor($query, $bindings = [], $useReadPdo = true, array $fetchUsing = [])
+    {
+        $results = $this->select($query, $bindings, $useReadPdo);
+
+        foreach ($results as $row) {
+            yield (object) $row;
+        }
+    }
+
+    /**
+     * Execute a closure within a "transaction".
+     *
+     * ClickHouse has limited transaction support, so the callback
+     * is executed directly without transactional guarantees.
+     *
+     * @param  \Closure  $callback
      * @param  int  $attempts
      * @return mixed
-     *
-     * @throws \Throwable
      */
     public function transaction(Closure $callback, $attempts = 1)
     {
-        // ClickHouse has limited transaction support, so we just execute the callback
         return $callback();
     }
 
     /**
      * Start a new database transaction.
      *
+     * No-op: ClickHouse does not support traditional transactions.
+     *
      * @return void
      */
     public function beginTransaction(): void
     {
-        // ClickHouse doesn't support traditional transactions
-        // This is a no-op for compatibility
+        //
     }
 
     /**
      * Commit the active database transaction.
      *
+     * No-op: ClickHouse does not support traditional transactions.
+     *
      * @return void
      */
     public function commit(): void
     {
-        // ClickHouse doesn't support traditional transactions
-        // This is a no-op for compatibility
+        //
     }
 
     /**
      * Rollback the active database transaction.
+     *
+     * No-op: ClickHouse does not support traditional transactions.
      *
      * @param  int|null  $toLevel
      * @return void
      */
     public function rollBack($toLevel = null): void
     {
-        // ClickHouse doesn't support traditional transactions
-        // This is a no-op for compatibility
+        //
     }
 
     /**
@@ -484,14 +571,13 @@ class ClickHouseConnection extends Connection
      */
     public function transactionLevel(): int
     {
-        // ClickHouse doesn't support nested transactions
         return 0;
     }
 
     /**
-     * Execute queries in "dry run" mode by logging them.
+     * Execute queries in "dry run" mode.
      *
-     * @param  Closure  $callback
+     * @param  \Closure  $callback
      * @return array
      */
     public function pretend(Closure $callback): array
@@ -500,7 +586,27 @@ class ClickHouseConnection extends Connection
     }
 
     /**
-     * Get the database name.
+     * Get the name of the database driver.
+     *
+     * @return string
+     */
+    public function getDriverName(): string
+    {
+        return 'clickhouse';
+    }
+
+    /**
+     * Disconnect from the database.
+     *
+     * @return void
+     */
+    public function disconnect(): void
+    {
+        // ClickHouse uses stateless HTTP — no persistent connection to close.
+    }
+
+    /**
+     * Get the name of the connected database.
      *
      * @return string
      */
@@ -512,27 +618,51 @@ class ClickHouseConnection extends Connection
     /**
      * Get the default query grammar instance.
      *
-     * @return Grammar
+     * @return \Illuminate\Database\Grammar
      */
     protected function getDefaultQueryGrammar(): Grammar
     {
-        return new ClickHouseQueryGrammar($this);
+        return $this->applyGrammarDefaults(new ClickHouseQueryGrammar($this));
     }
 
     /**
      * Get the default schema grammar instance.
      *
-     * @return Grammar
+     * @return \Illuminate\Database\Grammar
      */
     protected function getDefaultSchemaGrammar(): Grammar
     {
-        return new ClickHouseSchemaGrammar($this);
+        return $this->applyGrammarDefaults(new ClickHouseSchemaGrammar($this));
+    }
+
+    /**
+     * Apply connection and table prefix defaults to a grammar instance.
+     *
+     * Handles compatibility across Laravel versions where the Grammar
+     * initialization API changed between v11 and v12.
+     *
+     * @param  \Illuminate\Database\Grammar  $grammar
+     * @return \Illuminate\Database\Grammar
+     */
+    protected function applyGrammarDefaults(Grammar $grammar): Grammar
+    {
+        // Laravel 11: setConnection() exists, withTablePrefix() exists
+        // Laravel 12+: connection set via constructor, no setConnection/withTablePrefix
+        if (method_exists($grammar, 'setConnection')) {
+            $grammar->setConnection($this);
+        }
+
+        if (method_exists($this, 'withTablePrefix')) {
+            return $this->withTablePrefix($grammar);
+        }
+
+        return $grammar;
     }
 
     /**
      * Get the default post processor instance.
      *
-     * @return Processor
+     * @return \Illuminate\Database\Query\Processors\Processor
      */
     protected function getDefaultPostProcessor(): Processor
     {
@@ -577,7 +707,7 @@ class ClickHouseConnection extends Connection
     }
 
     /**
-     * Perform a health check on the ClickHouse connection.
+     * Determine if the ClickHouse server is reachable.
      *
      * @return bool
      *
@@ -599,7 +729,7 @@ class ClickHouseConnection extends Connection
     }
 
     /**
-     * Get ClickHouse server version information.
+     * Get the ClickHouse server version string.
      *
      * @return string
      *

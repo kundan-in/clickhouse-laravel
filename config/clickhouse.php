@@ -62,10 +62,35 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Request Timeout
+    |--------------------------------------------------------------------------
+    |
+    | The maximum number of seconds to wait for a query to complete. This
+    | controls both the ClickHouse server-side max_execution_time setting
+    | and the HTTP client timeout (CURLOPT_TIMEOUT). Set to 0 for no limit.
+    |
+    */
+    'timeout' => env('CLICKHOUSE_TIMEOUT', 120),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Connection Timeout
+    |--------------------------------------------------------------------------
+    |
+    | The maximum number of seconds to wait while trying to establish a
+    | connection to the ClickHouse server (CURLOPT_CONNECTTIMEOUT).
+    |
+    */
+    'connect_timeout' => env('CLICKHOUSE_CONNECT_TIMEOUT', 5),
+
+    /*
+    |--------------------------------------------------------------------------
     | Connection Settings
     |--------------------------------------------------------------------------
     |
-    | Additional connection settings for ClickHouse.
+    | Additional ClickHouse server-side settings applied to each query.
+    | See https://clickhouse.com/docs/en/operations/settings for all
+    | available settings.
     |
     */
     'settings' => [

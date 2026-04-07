@@ -7,17 +7,15 @@ use Illuminate\Support\ServiceProvider;
 use KundanIn\ClickHouseLaravel\Database\ClickHouseConnection;
 
 /**
- * ClickHouse Service Provider for Laravel
+ * ClickHouse service provider for Laravel.
  *
- * This service provider registers the ClickHouse database driver with Laravel's
- * database manager and publishes the configuration file.
+ * Registers the ClickHouse database driver with Laravel's DatabaseManager
+ * and publishes the package configuration file.
  */
 class ClickHouseServiceProvider extends ServiceProvider
 {
     /**
      * Bootstrap any application services.
-     *
-     * @return void
      */
     public function boot(): void
     {
@@ -28,8 +26,6 @@ class ClickHouseServiceProvider extends ServiceProvider
 
     /**
      * Register any application services.
-     *
-     * @return void
      */
     public function register(): void
     {
@@ -37,7 +33,6 @@ class ClickHouseServiceProvider extends ServiceProvider
 
         $this->app->resolving('db', function (DatabaseManager $db): void {
             $db->extend('clickhouse', function (array $config, string $name): ClickHouseConnection {
-                // Ensure we have all required connection parameters
                 $config = array_merge([
                     'driver' => 'clickhouse',
                     'host' => config('clickhouse.host', '127.0.0.1'),
@@ -46,6 +41,8 @@ class ClickHouseServiceProvider extends ServiceProvider
                     'username' => config('clickhouse.username', 'default'),
                     'password' => config('clickhouse.password', ''),
                     'prefix' => '',
+                    'timeout' => config('clickhouse.timeout', 120),
+                    'connect_timeout' => config('clickhouse.connect_timeout', 5),
                     'settings' => config('clickhouse.settings', []),
                 ], $config);
 
@@ -53,7 +50,6 @@ class ClickHouseServiceProvider extends ServiceProvider
             });
         });
 
-        // Register the ClickHouse facade
         $this->app->bind('clickhouse', function ($app) {
             return $app['db']->connection('clickhouse');
         });
@@ -62,7 +58,7 @@ class ClickHouseServiceProvider extends ServiceProvider
     /**
      * Get the published paths for the service provider.
      *
-     * @return array
+     * @return array<string, array<string, string>>
      */
     public function publishedPaths(): array
     {
