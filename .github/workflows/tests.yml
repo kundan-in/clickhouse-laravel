@@ -6,12 +6,15 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    fail-fast: false
 
     strategy:
-      fail-fast: true
       matrix:
         php: [8.2, 8.3, 8.4]
         laravel: [11.*, 12.*, 13.*]
@@ -22,6 +25,10 @@ jobs:
             testbench: 10.*
           - laravel: 13.*
             testbench: 11.*
+        exclude:
+          # Laravel 13 requires PHP 8.3+
+          - php: 8.2
+            laravel: 13.*
 
     name: PHP ${{ matrix.php }} - Laravel ${{ matrix.laravel }}
 
