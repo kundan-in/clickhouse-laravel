@@ -3,6 +3,7 @@
 namespace KundanIn\ClickHouseLaravel\Tests\Unit;
 
 use ClickHouseDB\Client;
+use ClickHouseDB\Statement;
 use Illuminate\Database\Eloquent\Model;
 use KundanIn\ClickHouseLaravel\Tests\TestCase;
 use Mockery;
@@ -417,12 +418,15 @@ class ClickHouseModelTest extends TestCase
     }
 
     /**
-     * Mock the connection select method.
+     * Mock the connection select method with a proper Statement return.
      */
     private function mockConnectionSelect(array $returnData): void
     {
+        $statement = Mockery::mock(Statement::class);
+        $statement->shouldReceive('rows')->andReturn($returnData);
+
         $mockClient = Mockery::mock(Client::class);
-        $mockClient->shouldReceive('select')->andReturn($returnData);
+        $mockClient->shouldReceive('select')->andReturn($statement);
 
         $connection = app('db')->connection('clickhouse');
         $reflection = new \ReflectionClass($connection);

@@ -289,7 +289,7 @@ class ClickHouseBlueprint extends Blueprint
      */
     public function array($column, $type = 'String')
     {
-        return $this->addColumn('array', $column, compact('type'));
+        return $this->addColumn('array', $column, ['arrayType' => $type]);
     }
 
     /**
@@ -398,19 +398,22 @@ class ClickHouseBlueprint extends Blueprint
      */
     public function lowCardinality($column, $type = 'String')
     {
-        return $this->addColumn('lowCardinality', $column, compact('type'));
+        return $this->addColumn('lowCardinality', $column, ['innerType' => $type]);
     }
 
     /**
-     * Create a Nullable column.
+     * Create a Nullable-wrapped column in ClickHouse.
+     *
+     * Unlike Laravel's fluent `->nullable()` modifier, this creates a column
+     * with the ClickHouse `Nullable(Type)` type wrapper.
      *
      * @param  string  $column
-     * @param  string  $type
+     * @param  string  $type  The inner ClickHouse type (e.g., 'String', 'Int32').
      * @return \Illuminate\Database\Schema\ColumnDefinition
      */
-    public function nullable($column, $type)
+    public function nullableColumn($column, $type)
     {
-        return $this->addColumn('nullable', $column, compact('type'));
+        return $this->addColumn('nullableColumn', $column, ['innerType' => $type]);
     }
 
     /**

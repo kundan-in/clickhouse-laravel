@@ -16,16 +16,16 @@ The `kundan-in/clickhouse-laravel` package is a comprehensive Laravel database d
 ## Technical Requirements
 
 ### PHP & Laravel Compatibility
-- **PHP**: ^8.1|^8.2|^8.3
-- **Laravel Framework**: ^8.0|^9.0|^10.0|^11.0|^12.0
-- **Laravel Support**: ^8.0|^9.0|^10.0|^11.0|^12.0
+- **PHP**: ^8.1|^8.2|^8.3|^8.4|^8.5
+- **Laravel Framework**: ^8.0|^9.0|^10.0|^11.0|^12.0|^13.0
+- **Laravel Support**: ^8.0|^9.0|^10.0|^11.0|^12.0|^13.0
 
 ### Dependencies
 - **Primary**: `smi2/phpclickhouse`: ^1.6 (ClickHouse client for PHP)
 - **Dev Dependencies**:
-  - `orchestra/testbench`: ^8.0|^9.0
-  - `phpunit/phpunit`: ^10.0|^11.0
-  - `mockery/mockery`: ^1.6
+  - `orchestra/testbench`: ^8.0|^9.0|^10.0|^11.0
+  - `phpunit/phpunit`: ^10.0|^11.0|^12.0
+  - `mockery/mockery`: ^1.6|^2.0
 
 ## Architecture
 
@@ -124,6 +124,8 @@ CLICKHOUSE_PORT=8123
 CLICKHOUSE_USERNAME=default
 CLICKHOUSE_PASSWORD=
 CLICKHOUSE_DATABASE=default
+CLICKHOUSE_TIMEOUT=120
+CLICKHOUSE_CONNECT_TIMEOUT=5
 CLICKHOUSE_READONLY=0
 CLICKHOUSE_MAX_EXECUTION_TIME=60
 ```
@@ -142,12 +144,24 @@ Add to `config/database.php`:
     'username' => env('CLICKHOUSE_USERNAME', 'default'),
     'password' => env('CLICKHOUSE_PASSWORD', ''),
     'database' => env('CLICKHOUSE_DATABASE', 'default'),
+    'timeout' => env('CLICKHOUSE_TIMEOUT', 120),
+    'connect_timeout' => env('CLICKHOUSE_CONNECT_TIMEOUT', 5),
     'settings' => [
         'readonly' => env('CLICKHOUSE_READONLY', 0),
         'max_execution_time' => env('CLICKHOUSE_MAX_EXECUTION_TIME', 60),
     ],
 ],
 ```
+
+### Timeout Configuration
+
+The package supports three timeout settings:
+
+| Setting | Config Key | Default | Description |
+|---------|-----------|---------|-------------|
+| Request Timeout | `timeout` | 120s | Controls both the ClickHouse server-side `max_execution_time` and the HTTP CURL timeout. Set to `0` for no limit. |
+| Connect Timeout | `connect_timeout` | 5s | Maximum seconds to wait when establishing a TCP connection to the ClickHouse server (`CURLOPT_CONNECTTIMEOUT`). |
+| Max Execution Time | `settings.max_execution_time` | 60s | ClickHouse server-side query execution limit (applied as a server setting). |
 
 ## Usage Patterns
 
@@ -250,6 +264,7 @@ $version = ClickHouse::getServerVersion();
 
 ### Access Control
 - Read-only connection support
+- Configurable request and connection timeouts
 - Configurable execution time limits
 - User-based authentication
 

@@ -7,10 +7,15 @@ use KundanIn\ClickHouseLaravel\Casts\ClickHouseArray;
 use KundanIn\ClickHouseLaravel\Casts\ClickHouseJson;
 
 /**
- * ClickHouse Eloquent Model
+ * Base Eloquent model for ClickHouse tables.
  *
- * This class extends Laravel's Eloquent Model to provide ClickHouse-specific
- * functionality and ensure compatibility with ClickHouse database operations.
+ * Extends Laravel's Eloquent Model and wires up the ClickHouse connection,
+ * query builder, and Eloquent builder. All standard Eloquent operations
+ * (create, update, delete, find, relationships, soft deletes) work as
+ * expected — the underlying Connection and Grammar handle ClickHouse
+ * syntax differences transparently.
+ *
+ * For soft deletes, use Laravel's `SoftDeletes` trait as you normally would.
  */
 class ClickHouseModel extends Model
 {
@@ -42,7 +47,7 @@ class ClickHouseModel extends Model
     /**
      * Get a new query builder instance for the connection.
      *
-     * @return \Illuminate\Database\Query\Builder
+     * @return \KundanIn\ClickHouseLaravel\Database\ClickHouseQueryBuilder
      */
     protected function newBaseQueryBuilder()
     {
@@ -63,7 +68,7 @@ class ClickHouseModel extends Model
     }
 
     /**
-     * Begin querying the model with proper builder.
+     * Begin querying the model.
      *
      * @return \KundanIn\ClickHouseLaravel\Database\ClickHouseEloquentBuilder
      */
@@ -73,7 +78,7 @@ class ClickHouseModel extends Model
     }
 
     /**
-     * Create a new Eloquent query builder for the model.
+     * Get a new query builder for the model.
      *
      * @return \KundanIn\ClickHouseLaravel\Database\ClickHouseEloquentBuilder
      */
@@ -83,7 +88,7 @@ class ClickHouseModel extends Model
     }
 
     /**
-     * Get a new query builder that doesn't have any global scopes or eager loading.
+     * Get a new query builder without global scopes.
      *
      * @return \KundanIn\ClickHouseLaravel\Database\ClickHouseEloquentBuilder
      */
@@ -93,50 +98,7 @@ class ClickHouseModel extends Model
     }
 
     /**
-     * Handle dynamic method calls into the model.
-     * This ensures proper method resolution for ClickHouse-specific methods.
-     *
-     * @param  string  $method
-     * @param  array  $parameters
-     * @return mixed
-     */
-    public function __call($method, $parameters)
-    {
-        // Handle the case where someone calls ->all() on a query builder instance
-        if ($method === 'all') {
-            return $this->newQuery()->get($parameters[0] ?? ['*']);
-        }
-
-        return parent::__call($method, $parameters);
-    }
-
-    /**
-     * Begin querying the model on the write connection.
-     *
-     * @return \KundanIn\ClickHouseLaravel\Database\ClickHouseEloquentBuilder
-     */
-    public static function on($connection = null)
-    {
-        $instance = new static;
-        $instance->setConnection($connection);
-
-        return $instance->newQuery();
-    }
-
-    /**
-     * Handle dynamic static method calls into the model.
-     *
-     * @param  string  $method
-     * @param  array  $parameters
-     * @return mixed
-     */
-    public static function __callStatic($method, $parameters)
-    {
-        return (new static)->$method(...$parameters);
-    }
-
-    /**
-     * Create a new instance of the given model and set connection.
+     * Create a new model instance and set the connection.
      *
      * @param  array  $attributes
      * @param  bool  $exists
@@ -153,119 +115,10 @@ class ClickHouseModel extends Model
     }
 
     /**
-     * Define a one-to-one relationship optimized for ClickHouse.
-     *
-     * @param  string  $related
-     * @param  string|null  $foreignKey
-     * @param  string|null  $localKey
-     * @return \Illuminate\Database\Eloquent\Relations\HasOne
-     */
-    public function hasOne($related, $foreignKey = null, $localKey = null)
-    {
-        $instance = $this->newRelatedInstance($related);
-
-        $foreignKey = $foreignKey ?: $this->getForeignKey();
-        $localKey = $localKey ?: $this->getKeyName();
-
-        return $this->newHasOne($instance->newQuery(), $this, $instance->getTable().'.'.$foreignKey, $localKey);
-    }
-
-    /**
-     * Define a one-to-many relationship optimized for ClickHouse.
-     *
-     * @param  string  $related
-     * @param  string|null  $foreignKey
-     * @param  string|null  $localKey
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany
-     */
-    public function hasMany($related, $foreignKey = null, $localKey = null)
-    {
-        $instance = $this->newRelatedInstance($related);
-
-        $foreignKey = $foreignKey ?: $this->getForeignKey();
-        $localKey = $localKey ?: $this->getKeyName();
-
-        return $this->newHasMany($instance->newQuery(), $this, $instance->getTable().'.'.$foreignKey, $localKey);
-    }
-
-    /**
-     * Define an inverse one-to-one or many relationship optimized for ClickHouse.
-     *
-     * @param  string  $related
-     * @param  string|null  $foreignKey
-     * @param  string|null  $ownerKey
-     * @param  string|null  $relation
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
-     */
-    public function belongsTo($related, $foreignKey = null, $ownerKey = null, $relation = null)
-    {
-        if (is_null($relation)) {
-            $relation = $this->guessBelongsToRelation();
-        }
-
-        $instance = $this->newRelatedInstance($related);
-
-        if (is_null($foreignKey)) {
-            $foreignKey = snake_case($relation).'_'.$instance->getKeyName();
-        }
-
-        $ownerKey = $ownerKey ?: $instance->getKeyName();
-
-        return $this->newBelongsTo($instance->newQuery(), $this, $foreignKey, $ownerKey, $relation);
-    }
-
-    /**
-     * Create ClickHouse-optimized belongs to many relationship.
-     * Note: This is emulated since ClickHouse doesn't have traditional pivot tables.
-     *
-     * @param  string  $related
-     * @param  string|null  $table
-     * @param  string|null  $foreignPivotKey
-     * @param  string|null  $relatedPivotKey
-     * @param  string|null  $parentKey
-     * @param  string|null  $relatedKey
-     * @param  string|null  $relation
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
-     */
-    public function belongsToMany($related, $table = null, $foreignPivotKey = null, $relatedPivotKey = null, $parentKey = null, $relatedKey = null, $relation = null)
-    {
-        if (is_null($relation)) {
-            $relation = $this->guessBelongsToManyRelation();
-        }
-
-        $instance = $this->newRelatedInstance($related);
-
-        $foreignPivotKey = $foreignPivotKey ?: $this->getForeignKey();
-        $relatedPivotKey = $relatedPivotKey ?: $instance->getForeignKey();
-
-        if (is_null($table)) {
-            $table = $this->joiningTable($related, $instance);
-        }
-
-        return $this->newBelongsToMany(
-            $instance->newQuery(), $this, $table, $foreignPivotKey,
-            $relatedPivotKey, $parentKey ?: $this->getKeyName(),
-            $relatedKey ?: $instance->getKeyName(), $relation
-        );
-    }
-
-    /**
-     * Get the default casts array for ClickHouse models.
-     *
-     * @return array
-     */
-    protected function casts(): array
-    {
-        return array_merge(parent::casts(), [
-            // Add default ClickHouse-specific casts
-        ]);
-    }
-
-    /**
-     * Cast an attribute to a native ClickHouse array.
+     * Register a cast for a ClickHouse Array column.
      *
      * @param  string  $key
-     * @param  string  $type
+     * @param  string  $type  The element type (e.g., 'String', 'UInt32').
      * @return $this
      */
     public function castAsArray($key, $type = 'String')
@@ -276,10 +129,10 @@ class ClickHouseModel extends Model
     }
 
     /**
-     * Cast an attribute to JSON.
+     * Register a cast for a ClickHouse JSON column.
      *
      * @param  string  $key
-     * @param  bool  $associative
+     * @param  bool  $associative  Whether to decode as associative array.
      * @return $this
      */
     public function castAsJson($key, $associative = true)
@@ -287,89 +140,5 @@ class ClickHouseModel extends Model
         $this->casts[$key] = ClickHouseJson::class.':'.($associative ? 'true' : 'false');
 
         return $this;
-    }
-
-    /**
-     * Perform a model soft delete (ClickHouse doesn't support real deletes).
-     * This sets a deleted flag or timestamp instead.
-     *
-     * @return bool
-     */
-    public function delete()
-    {
-        if (is_null($this->getKeyName())) {
-            throw new \Exception('No primary key defined on model.');
-        }
-
-        if (! $this->exists) {
-            return false;
-        }
-
-        if ($this->fireModelEvent('deleting') === false) {
-            return false;
-        }
-
-        // Check if model uses soft deletes with flag
-        if (method_exists($this, 'runSoftDelete')) {
-            return $this->runSoftDelete();
-        }
-
-        // For ClickHouse, we typically mark as deleted rather than actual delete
-        if (in_array('deleted_at', $this->fillable) || isset($this->casts['deleted_at'])) {
-            $this->deleted_at = now();
-            $this->save();
-        } elseif (in_array('is_deleted', $this->fillable) || isset($this->casts['is_deleted'])) {
-            $this->is_deleted = 1;
-            $this->save();
-        }
-
-        $this->exists = false;
-
-        $this->fireModelEvent('deleted', false);
-
-        return true;
-    }
-
-    /**
-     * Restore a soft-deleted model instance.
-     *
-     * @return bool|null
-     */
-    public function restore()
-    {
-        if ($this->fireModelEvent('restoring') === false) {
-            return false;
-        }
-
-        if (in_array('deleted_at', $this->fillable) || isset($this->casts['deleted_at'])) {
-            $this->deleted_at = null;
-        } elseif (in_array('is_deleted', $this->fillable) || isset($this->casts['is_deleted'])) {
-            $this->is_deleted = 0;
-        }
-
-        $this->exists = true;
-        $result = $this->save();
-
-        $this->fireModelEvent('restored', false);
-
-        return $result;
-    }
-
-    /**
-     * Determine if the model instance has been soft-deleted.
-     *
-     * @return bool
-     */
-    public function trashed()
-    {
-        if (isset($this->deleted_at)) {
-            return ! is_null($this->deleted_at);
-        }
-
-        if (isset($this->is_deleted)) {
-            return $this->is_deleted == 1;
-        }
-
-        return false;
     }
 }

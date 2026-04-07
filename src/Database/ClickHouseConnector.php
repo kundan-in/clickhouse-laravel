@@ -8,10 +8,10 @@ use Illuminate\Database\Connectors\ConnectorInterface;
 use InvalidArgumentException;
 
 /**
- * ClickHouse Database Connector
+ * ClickHouse database connector for Laravel.
  *
- * This class extends Laravel's Connector to provide ClickHouse database
- * connectivity using the smi2/phpClickHouse client library.
+ * Extends Laravel's base Connector to establish connections to
+ * ClickHouse using the smi2/phpClickHouse Client library.
  */
 class ClickHouseConnector extends Connector implements ConnectorInterface
 {
@@ -33,14 +33,16 @@ class ClickHouseConnector extends Connector implements ConnectorInterface
     }
 
     /**
-     * Create a new ClickHouse connection.
+     * Create a new ClickHouse client instance.
      *
      * @param  string  $dsn
      * @param  array  $config
      * @param  array  $options
      * @return \ClickHouseDB\Client
+     *
+     * @throws \InvalidArgumentException
      */
-    protected function createConnection($dsn, array $config, array $options)
+    public function createConnection($dsn, array $config, array $options)
     {
         $clientConfig = [
             'host' => $config['host'] ?? '127.0.0.1',
@@ -50,36 +52,33 @@ class ClickHouseConnector extends Connector implements ConnectorInterface
             'database' => $config['database'] ?? 'default',
         ];
 
-        // Add any additional settings
         if (isset($config['settings']) && is_array($config['settings'])) {
             $clientConfig['settings'] = $config['settings'];
         }
 
-        // Handle timeout settings
-        if (isset($config['timeout'])) {
-            $clientConfig['timeout'] = $config['timeout'];
-        }
-
-        if (isset($config['connect_timeout'])) {
-            $clientConfig['connect_timeout'] = $config['connect_timeout'];
-        }
-
-        // Handle SSL settings
         if (isset($config['https']) && $config['https']) {
             $clientConfig['https'] = true;
         }
 
         try {
-            return new Client($clientConfig);
+            $client = new Client($clientConfig);
+
+            if (isset($config['connect_timeout'])) {
+                $client->setConnectTimeOut((float) $config['connect_timeout']);
+            }
+
+            if (isset($config['timeout'])) {
+                $client->setTimeout((int) $config['timeout']);
+            }
+
+            return $client;
         } catch (\Exception $e) {
             throw new InvalidArgumentException("Could not create ClickHouse connection: {$e->getMessage()}", 0, $e);
         }
     }
 
     /**
-     * Create a DSN string from a configuration.
-     * Note: ClickHouse client doesn't use traditional PDO DSN format,
-     * but we provide this for compatibility.
+     * Build a DSN string from the given configuration.
      *
      * @param  array  $config
      * @return string
@@ -94,39 +93,37 @@ class ClickHouseConnector extends Connector implements ConnectorInterface
     }
 
     /**
-     * Get the PDO options based on the configuration.
-     * Note: ClickHouse doesn't use PDO, but we maintain compatibility.
+     * Get the connection options from the configuration.
      *
      * @param  array  $config
      * @return array
      */
-    protected function getOptions(array $config): array
+    public function getOptions(array $config): array
     {
         return $config['options'] ?? [];
     }
 
     /**
-     * Get the default PDO connection options.
+     * Get the default connection options.
      *
      * @return array
      */
-    protected function getDefaultOptions(): array
+    public function getDefaultOptions(): array
     {
         return [];
     }
 
     /**
-     * Set the connection character set and collation.
-     * Note: ClickHouse handles charset differently, this is for compatibility.
+     * Configure the connection character set.
+     *
+     * ClickHouse uses UTF-8 by default; this is a no-op for compatibility.
      *
      * @param  \ClickHouseDB\Client  $connection
      * @param  array  $config
-     * @return void
      */
     protected function configureCharset($connection, array $config): void
     {
-        // ClickHouse typically uses UTF-8 by default
-        // Additional charset configuration can be added here if needed
+        //
     }
 
     /**
@@ -134,18 +131,16 @@ class ClickHouseConnector extends Connector implements ConnectorInterface
      *
      * @param  \ClickHouseDB\Client  $connection
      * @param  array  $config
-     * @return void
      */
     protected function configureTimezone($connection, array $config): void
     {
         if (isset($config['timezone'])) {
-            // ClickHouse timezone configuration can be added here
-            // This might involve setting session timezone or connection settings
+            // ClickHouse timezone configuration can be applied via session settings.
         }
     }
 
     /**
-     * Create a Laravel database connection instance.
+     * Create a Laravel-compatible ClickHouse connection instance.
      *
      * @param  array  $config
      * @return \KundanIn\ClickHouseLaravel\Database\ClickHouseConnection

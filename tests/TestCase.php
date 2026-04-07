@@ -6,10 +6,10 @@ use KundanIn\ClickHouseLaravel\ClickHouseServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 /**
- * Base Test Case
+ * Base test case for the ClickHouse Laravel package.
  *
- * This class provides the base functionality for all package tests,
- * setting up the Laravel testing environment with the ClickHouse service provider.
+ * Sets up the Laravel testing environment with the ClickHouse
+ * service provider and a default database connection.
  */
 abstract class TestCase extends Orchestra
 {
@@ -24,7 +24,7 @@ abstract class TestCase extends Orchestra
     }
 
     /**
-     * Get package providers.
+     * Get the package providers to register.
      *
      * @param  \Illuminate\Foundation\Application  $app
      * @return array<int, class-string>
@@ -37,7 +37,7 @@ abstract class TestCase extends Orchestra
     }
 
     /**
-     * Define environment setup.
+     * Define the environment setup for testing.
      *
      * @param  \Illuminate\Foundation\Application  $app
      * @return void
@@ -53,6 +53,8 @@ abstract class TestCase extends Orchestra
             'username' => env('CLICKHOUSE_USERNAME', 'default'),
             'password' => env('CLICKHOUSE_PASSWORD', ''),
             'database' => env('CLICKHOUSE_DATABASE', 'test'),
+            'timeout' => 120,
+            'connect_timeout' => 5,
             'settings' => [
                 'readonly' => 0,
                 'max_execution_time' => 60,
