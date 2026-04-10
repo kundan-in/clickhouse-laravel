@@ -662,11 +662,11 @@ class ClickHouseConnection extends Connection
     /**
      * Get the default post processor instance.
      *
-     * @return \Illuminate\Database\Query\Processors\Processor
+     * @return ClickHouseQueryProcessor
      */
-    protected function getDefaultPostProcessor(): Processor
+    protected function getDefaultPostProcessor(): ClickHouseQueryProcessor
     {
-        return new Processor;
+        return new ClickHouseQueryProcessor();
     }
 
     /**
