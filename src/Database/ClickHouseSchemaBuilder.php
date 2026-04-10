@@ -384,4 +384,15 @@ class ClickHouseSchemaBuilder extends Builder
             $blueprint->dropMaterializedView();
         }));
     }
+
+    /**
+     * Get the foreign keys for a given table.
+     *
+     * @param  string  $table
+     * @return array
+     */
+    public function getForeignKeys($table)
+    {
+        return [];
+    }
 }
